@@ -42,7 +42,6 @@ export function updateDrawerState(state) {
     const decided = state.decided_count ?? (state.decided_items?.length || 0);
     const pending = state.pending_count ?? (state.pending_items?.length || 0);
     countBadge.textContent = `${decided} tranché${decided > 1 ? "s" : ""} · ${pending} restant${pending > 1 ? "s" : ""}`;
-    countBadge.style.display = "inline-flex";
   }
   const drawer = document.getElementById("deck-drawer");
   if (drawer?.classList.contains("open")) {

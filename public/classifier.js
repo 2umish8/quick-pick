@@ -108,7 +108,7 @@ export function initSettingsModal() {
   function syncProviderUI() {
     const isCustom = providerSelect?.value === "custom";
     if (modelContainer) {
-      modelContainer.style.display = isCustom ? "none" : "block";
+      modelContainer.hidden = isCustom;
     }
     if (endpointInput) {
       endpointInput.placeholder = isCustom
@@ -123,12 +123,12 @@ export function initSettingsModal() {
     if (!feedbackEl) return;
     feedbackEl.textContent = msg;
     feedbackEl.className = `settings-feedback ${isSuccess ? 'success' : 'error'}`;
-    feedbackEl.style.display = "block";
+    feedbackEl.hidden = false;
   }
 
   function clearFeedback() {
     if (!feedbackEl) return;
-    feedbackEl.style.display = "none";
+    feedbackEl.hidden = true;
     feedbackEl.textContent = "";
   }
 
@@ -141,12 +141,12 @@ export function initSettingsModal() {
     if (enabledInput) enabledInput.checked = cfg.enabled;
     syncProviderUI();
     clearFeedback();
-    modal.style.display = "flex";
+    modal.hidden = false;
     modal.setAttribute("aria-hidden", "false");
   }
 
   function closeModal() {
-    modal.style.display = "none";
+    modal.hidden = true;
     modal.setAttribute("aria-hidden", "true");
   }
 
@@ -156,7 +156,7 @@ export function initSettingsModal() {
     if (e.target === modal) closeModal();
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && modal.style.display === "flex") {
+    if (e.key === "Escape" && !modal.hidden) {
       closeModal();
     }
   });

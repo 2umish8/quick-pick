@@ -19,6 +19,11 @@
   --radius-btn: 10px;
 }
 
+/* The hidden attribute is authoritative: CSP forbids inline style attributes. */
+[hidden] {
+  display: none !important;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;

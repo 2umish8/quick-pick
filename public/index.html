@@ -21,12 +21,12 @@
 <header class="app-header">
   <div class="logo-zone" id="logo-zone" title="Retour aux decks">
     <span class="logo-title">⚡ Quick-Pick</span>
-    <span class="deck-pill" id="header-deck-pill" style="display: none;"></span>
+    <span class="deck-pill" id="header-deck-pill" hidden></span>
   </div>
   <div class="header-actions-zone">
     <button class="header-settings-btn" id="header-settings-btn" title="Paramètres du classifieur" aria-label="Paramètres">⚙️</button>
-    <button class="header-undo-btn" id="header-undo-btn" style="display: none;" title="Annuler la dernière décision (Ctrl+Z)" aria-label="Annuler la dernière décision">↩ Annuler</button>
-    <button class="progress-pill-btn" id="header-progress-pill" style="display: none;" title="Voir les décisions et la file">
+    <button class="header-undo-btn" id="header-undo-btn" hidden title="Annuler la dernière décision (Ctrl+Z)" aria-label="Annuler la dernière décision">↩ Annuler</button>
+    <button class="progress-pill-btn" id="header-progress-pill" hidden title="Voir les décisions et la file">
       <!-- Rempli dynamiquement : X tranchés · Y restants -->
     </button>
   </div>
@@ -50,7 +50,7 @@
   </section>
 
   <!-- Vue Jeu : Stack réelle carrée -->
-  <section id="view-game" style="display: none;">
+  <section id="view-game" hidden>
     <div class="card-stack-container" id="card-stack-container"></div>
     <div class="comment-bar" id="comment-bar">
       <input type="text" id="decision-comment-input" class="comment-input" placeholder="Note ou critère optionnel..." autocomplete="off" />
@@ -59,7 +59,7 @@
   </section>
 
   <!-- Vue Summary -->
-  <section id="view-summary" style="display: none;">
+  <section id="view-summary" hidden>
     <div id="summary-content"></div>
   </section>
 </main>
@@ -80,7 +80,7 @@
 </div>
 
 <!-- Modale de Paramètres du Classifieur -->
-<div id="settings-modal" class="settings-modal-backdrop" aria-hidden="true" style="display: none;">
+<div id="settings-modal" class="settings-modal-backdrop" aria-hidden="true" hidden>
   <div class="settings-modal-card">
     <div class="settings-modal-header">
       <h3 class="settings-modal-title">Paramètres du Classifieur</h3>
@@ -114,7 +114,7 @@
           <span>Activer les suggestions IA sur les cartes</span>
         </label>
       </div>
-      <div class="settings-feedback" id="settings-feedback" style="display: none;"></div>
+      <div class="settings-feedback" id="settings-feedback" hidden></div>
     </div>
     <div class="settings-modal-footer">
       <button class="settings-btn secondary" id="settings-test-btn" type="button">Tester la connexion</button>
