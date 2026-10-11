@@ -1,6 +1,8 @@
 // REST API module for quick-pick
 // Runs at module load, before app.js reads location.hash (app.js imports this module first).
 const TOKEN_KEY = "quickPickToken";
+// Default timeout: keeps a silent server from blocking the UI forever.
+export const REQUEST_TIMEOUT_MS = 15000;
 
 export function getToken() {
   try {
@@ -102,6 +104,8 @@ export function authHeaders() {
 
 export async function request(endpoint, options = {}) {
   const doFetch = (extraHeaders = {}) => fetch(endpoint, {
+    // A caller-provided signal wins over the default timeout (options spread after).
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     ...options,
     // authHeaders() last so a token entered at the 401 prompt wins on retry.
     headers: { "Content-Type": "application/json", ...(options.headers || {}), ...extraHeaders, ...authHeaders() },
@@ -123,6 +127,7 @@ export async function request(endpoint, options = {}) {
 // Same 401 -> prompt -> retry flow for raw fetch callers (classifier helpers).
 export async function authFetch(url, options = {}) {
   let response = await fetch(url, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     ...options,
     headers: { "Content-Type": "application/json", ...(options.headers || {}), ...authHeaders() },
   });

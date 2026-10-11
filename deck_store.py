@@ -68,7 +68,26 @@ def load_deck(deck_id):
         deck_data = json.load(handle)
     if not isinstance(deck_data, dict):
         raise DeckError(f"Format de deck invalide : {deck_id}")
+    validate_items(deck_data.get("items"), deck_id)
     return deck_data
+
+
+def validate_items(items, deck_id):
+    """Reject decks whose items miss the fields the API reads without a default.
+
+    Read-time only: nothing is rewritten on disk, a broken deck raises DeckError (4xx) instead of
+    crashing the request handler (5xx).
+    """
+    if items is None:
+        return
+    if not isinstance(items, list):
+        raise DeckError(f"Items de deck invalides : {deck_id} (tableau JSON attendu)")
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise DeckError(f"Item #{index + 1} invalide dans le deck {deck_id} (objet JSON attendu)")
+        for field in ("id", "title"):
+            if not str(item.get(field) or "").strip():
+                raise DeckError(f"Item #{index + 1} sans '{field}' valide dans le deck {deck_id}")
 
 
 def save_deck(deck_id, deck_data):

@@ -189,6 +189,8 @@ Chaque deck est un document JSON autonome :
 }
 ```
 
+> **Validation à la lecture** : au chargement, chaque deck est contrôlé — `items` doit être un tableau JSON et chaque item doit porter un `id` et un `title` non vides. Un deck non conforme renvoie une erreur `404` explicite ; le fichier n'est jamais réécrit ni corrigé automatiquement.
+
 ---
 
 ## 🔒 Sécurité & Déploiement en Production
@@ -210,6 +212,8 @@ ruff check .                                        # optionnel : pip install -e
 ```
 
 Les mêmes vérifications tournent dans la CI à chaque pull request.
+
+> Les checks front-end (`tests/js/*.test.mjs`, sans dépendance et sans DOM) sont lancés automatiquement via `node --test` si `node` est installé, sinon ils sont ignorés.
 
 ---
 

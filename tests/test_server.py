@@ -4,7 +4,10 @@ import json
 import os
 import shutil
 import tempfile
+import threading
 import unittest
+from http.client import HTTPConnection
+from http.server import ThreadingHTTPServer
 
 import server
 
@@ -230,6 +233,118 @@ class QuickPickServerTests(unittest.TestCase):
         # Valid ID
         path = resolve_deck_path("valid-deck_123")
         self.assertTrue(path.endswith("valid-deck_123.json"))
+
+    def test_load_deck_rejects_items_without_id_or_title(self):
+        from deck_store import DeckError
+        invalid_items = [
+            [{"title": "Pas d'identifiant"}],
+            [{"id": "item-1"}],
+            [{"id": "item-1", "title": "   "}],
+            [{"id": "item-1", "title": "OK"}, "pas-un-objet"],
+            {"id": "item-1"},
+        ]
+        for index, items in enumerate(invalid_items):
+            deck_id = f"broken-{index}"
+            with open(os.path.join(self.decks_dir, f"{deck_id}.json"), "w", encoding="utf-8") as handle:
+                json.dump({"id": deck_id, "title": "Deck cassé", "items": items}, handle)
+            with self.assertRaises(DeckError):
+                server.load_deck(deck_id)
+
+    def test_load_deck_keeps_accepting_decks_without_items(self):
+        deck_id = "no-items"
+        with open(os.path.join(self.decks_dir, f"{deck_id}.json"), "w", encoding="utf-8") as handle:
+            json.dump({"id": deck_id, "title": "Deck vide", "default_actions": []}, handle)
+        self.assertEqual(server.find_deck_state(server.load_deck(deck_id))["is_completed"], True)
+
+    def test_summary_ignores_naive_unparsable_and_non_string_timestamps(self):
+        deck = server.load_deck("test-deck")
+        decided_at = [
+            "2026-10-11T12:00:00",             # naive, assumed UTC
+            "2026-10-11T12:00:30+00:00",       # aware
+            "pas-une-date",                     # unparsable, ignored
+            1752288030,                          # non-string, ignored
+        ]
+        for item, stamp in zip(deck["items"], decided_at):
+            item.update({"status": "decided", "chosen_action": "approve", "decided_at": stamp})
+
+        summary = server.compute_deck_summary(deck)
+        self.assertEqual(summary["total_decided"], 2)
+        self.assertEqual(summary["elapsed_seconds"], 30)
+
+    def test_summary_with_a_single_valid_timestamp(self):
+        deck = server.load_deck("test-deck")
+        deck["items"][0].update({"status": "decided", "chosen_action": "approve", "decided_at": "2026-10-11T12:00:00"})
+        deck["items"][1].update({"status": "decided", "chosen_action": "approve", "decided_at": "pas-une-date"})
+        summary = server.compute_deck_summary(deck)
+        self.assertEqual(summary["elapsed_seconds"], 1)
+
+
+class QuickPickHttpTests(unittest.TestCase):
+    """End-to-end checks against a real server instance (no mocked handlers)."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.decks_dir = os.path.join(self.temp_dir, "decks")
+        os.makedirs(self.decks_dir, exist_ok=True)
+        self.original_decks_dir = server.DECKS_DIR
+        server.DECKS_DIR = self.decks_dir
+        with open(os.path.join(self.decks_dir, "test-deck.json"), "w", encoding="utf-8") as handle:
+            json.dump({
+                "id": "test-deck",
+                "title": "Deck de Test",
+                "default_actions": [{"id": "approve", "label": "Conserver", "direction": "east", "key": "d", "color": "success"}],
+                "items": [{"id": "item-1", "title": "Premier Item", "status": "pending"}],
+            }, handle)
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.QuickPickHandler)
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=5)
+        server.DECKS_DIR = self.original_decks_dir
+        shutil.rmtree(self.temp_dir)
+
+    def _request(self, method, path, body=None):
+        conn = HTTPConnection("127.0.0.1", self.httpd.server_address[1], timeout=10)
+        try:
+            conn.request(method, path, body=body, headers={"Content-Type": "application/json"})
+            response = conn.getresponse()
+            raw = response.read().decode("utf-8")
+            return response.status, (json.loads(raw) if raw else {})
+        finally:
+            conn.close()
+
+    def test_non_object_json_body_returns_400(self):
+        for body in ("[]", '"chaine"', "42", "null", "true"):
+            status, payload = self._request("POST", "/api/decks/test-deck/decide", body)
+            self.assertEqual(status, 400, f"body={body} payload={payload}")
+            self.assertEqual(payload["error"], "invalid_json")
+
+    def test_malformed_json_body_still_returns_400(self):
+        status, payload = self._request("POST", "/api/decks/test-deck/decide", "{not json")
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "invalid_json")
+
+    def test_valid_object_body_still_works(self):
+        status, payload = self._request("POST", "/api/decks/test-deck/decide", '{"item_id": "item-1", "action": "approve"}')
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["decided_count"], 1)
+
+    def test_deck_with_invalid_items_returns_4xx_not_500(self):
+        with open(os.path.join(self.decks_dir, "broken-deck.json"), "w", encoding="utf-8") as handle:
+            json.dump({"id": "broken-deck", "title": "Deck cassé", "items": [{"title": "Pas d'identifiant"}]}, handle)
+        for path in ("/api/decks/broken-deck", "/api/decks/broken-deck/summary"):
+            status, payload = self._request("GET", path)
+            self.assertEqual(status, 404, f"{path} -> {payload}")
+        status, payload = self._request("POST", "/api/decks/broken-deck/decide", '{"item_id": "item-1"}')
+        self.assertEqual(status, 404)
+
+    def test_classifier_routes_also_reject_non_object_body(self):
+        status, payload = self._request("POST", "/api/classifier/predict", "[]")
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "invalid_json")
 
 
 if __name__ == "__main__":
