@@ -7,7 +7,7 @@
 
 ## ✨ Points Forts
 
-* **Zéro Dépendance** : 100% Python standard library (`server.py`). Aucun `pip install`, aucun bundler, démarre instantanément.
+* **Zéro Dépendance** : 100% Python standard library (`server.py`). Aucun bundler, démarre instantanément (installation par `pip` optionnelle).
 * **Mobile-First & Clavier Desktop** : Swipe tactile physique fluide (`passive: false`) sur smartphone, flèches directionnelles et touches dédiées (`a`/`d`/`w`) sur desktop.
 * **Anti-Fork & BYOK Intégré** : Support natif universel des APIs OpenAI-compatibles (OpenAI `gpt-4o-mini`, Ollama local `llama3.2`, Groq, OpenRouter) et des webhooks de scoring custom.
 * **Persistance Simple & Propre** : Decks stockés en fichiers JSON lisibles et manipulables par scripts ou agents IA (`deck_cli.py`).
@@ -26,7 +26,18 @@ python3 server.py
 ```
 👉 Ouvrez votre navigateur sur **`http://localhost:8791`**.
 
-### Option B : Avec Docker Compose (Recommandé en Self-Host)
+### Option B : Installation par pip
+
+```bash
+pip install quick-pick
+quick-pick              # serveur web sur http://localhost:8791
+quick-pick-cli list     # CLI de gestion des decks
+```
+
+L'installation embarque le front (`public/`) et les decks d'exemple (`examples/`). Le dépôt reste
+utilisable tel quel : `python3 server.py` fonctionne toujours depuis un clone.
+
+### Option C : Avec Docker Compose (Recommandé en Self-Host)
 
 ```bash
 # Choisir un jeton d'API (obligatoire : le conteneur écoute sur 0.0.0.0)
@@ -34,6 +45,18 @@ export QUICK_PICK_TOKEN="un-jeton-long-et-aleatoire"
 docker compose up -d
 ```
 👉 Le service est immédiatement opérationnel avec persistance des données dans `./data/decks`. Ouvrez ensuite **`http://localhost:8791/#token=<votre-jeton>`** : le jeton est conservé pour la session de l'onglet uniquement (jamais dans la chaîne de requête), puis retiré du fragment d'URL, et joint automatiquement à chaque appel d'API. Sur une machine de confiance, ajoutez `&remember=1` (`#token=<jeton>&remember=1`) pour le conserver dans le `localStorage` ; sinon, vous pouvez aussi le saisir à l'invite affichée en cas de `401 unauthorized`.
+
+L'image Docker est figée sur un digest (`python:3.12-alpine`), tourne sous un utilisateur non privilégié
+(`quickpick`, UID 10001) et expose un `HEALTHCHECK` sur `/api/health`. Docker Compose lance le conteneur
+avec l'UID de l'hôte (1000 par défaut) pour que le dossier `./data/decks` monté reste accessible :
+
+```bash
+# Si votre UID Linux est différent de 1000 :
+export QUICK_PICK_UID=$(id -u) QUICK_PICK_GID=$(id -g)
+docker compose up -d
+```
+
+Vérification rapide : `docker compose ps` doit afficher `(healthy)`, `curl -H "X-Quick-Pick-Token: $QUICK_PICK_TOKEN" http://localhost:8791/api/health` doit répondre `{"ok": true, ...}`.
 
 ---
 
@@ -43,7 +66,7 @@ docker compose up -d
 |---|---|---|
 | `QUICK_PICK_HOST` | `127.0.0.1` (`0.0.0.0` dans Docker) | Adresse IP d'écoute du serveur |
 | `QUICK_PICK_PORT` | `8791` | Port d'écoute HTTP |
-| `QUICK_PICK_DATA_DIR` | `./data/decks` | Dossier de stockage des fichiers JSON de decks |
+| `QUICK_PICK_DATA_DIR` | `./data/decks` | Dossier de stockage des fichiers JSON de decks (non versionné, seedé depuis `examples/decks/` au premier lancement) |
 | `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS` | `0` | Autoriser le proxy IA à requêter des endpoints privés/locaux (ex : Ollama sur `127.0.0.1:11434`). Mettre à `1` pour utiliser un LLM local (voir § Assistance IA) |
 | `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS` | (vide) | Liste optionnelle de noms d'hôtes autorisés pour le proxy IA, séparés par des virgules (ex : `api.openai.com`). Si renseignée, tout endpoint dont l'hôte n'est pas listé est refusé |
 | `QUICK_PICK_TOKEN` | (vide) | Jeton d'authentification de l'API (`Authorization: Bearer <jeton>` ou `X-Quick-Pick-Token: <jeton>`). Obligatoire si le serveur écoute sur une adresse non locale |
@@ -132,6 +155,11 @@ python3 deck_cli.py delete sprint-42
 
 ## 📄 Format d'un Deck (`data/decks/<id>.json`)
 
+Le dossier `data/` n'est **pas** versionné : il contient vos decks. Au premier lancement, s'il ne
+contient aucun deck, les decks d'exemple de `examples/decks/` y sont copiés tels quels. Un deck
+existant n'est jamais écrasé ni supprimé (ni au démarrage, ni pendant une mise à jour) : pour repartir
+des exemples, supprimez le fichier concerné de `data/decks/` puis relancez le serveur.
+
 Chaque deck est un document JSON autonome :
 
 ```json
@@ -177,8 +205,11 @@ Quick-Pick est conçu comme une application mono-utilisateur ou d'équipe intern
 ## 🧪 Tests
 
 ```bash
-python3 -m unittest discover tests
+PYTHONPATH=. python3 -m unittest discover -s tests
+ruff check .                                        # optionnel : pip install -e ".[dev]"
 ```
+
+Les mêmes vérifications tournent dans la CI à chaque pull request.
 
 ---
 

@@ -4,6 +4,11 @@ services:
     image: quick-pick:latest
     container_name: quick-pick
     restart: unless-stopped
+    # The image runs as the unprivileged `quickpick` user (UID 10001). Compose runs it as the
+    # host user instead so the bind-mounted ./data/decks keeps working whatever its ownership
+    # (Docker creates a missing source directory as root, which UID 10001 cannot write to).
+    # Export QUICK_PICK_UID/QUICK_PICK_GID if your host UID is not 1000.
+    user: "${QUICK_PICK_UID:-1000}:${QUICK_PICK_GID:-1000}"
     ports:
       - "127.0.0.1:8791:8791"
     volumes:

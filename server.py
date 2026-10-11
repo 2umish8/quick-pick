@@ -377,6 +377,7 @@ def main():
         print(f"[quick-pick] error: {err}", file=sys.stderr, flush=True)
         sys.exit(2)
     port = int(sys.argv[1] if len(sys.argv) > 1 else os.environ.get("QUICK_PICK_PORT", str(DEFAULT_PORT)))
+    deck_store.seed_example_decks()
     server = ThreadingHTTPServer((host, port), QuickPickHandler)
     print(f"[quick-pick] http://{host}:{port} ({deck_store.DECKS_DIR})", flush=True)
     try: server.serve_forever()

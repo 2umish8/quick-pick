@@ -1,10 +1,12 @@
 import json
 import os
 import re
+import shutil
 import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DECKS_DIR = os.path.abspath(os.environ.get("QUICK_PICK_DATA_DIR", os.path.join(BASE_DIR, "data", "decks")))
+EXAMPLES_DIR = os.path.join(BASE_DIR, "examples", "decks")
 
 
 def set_decks_dir(path):
@@ -14,6 +16,32 @@ def set_decks_dir(path):
 
 def get_decks_dir():
     return DECKS_DIR
+
+
+def seed_example_decks():
+    """Copy the bundled example decks into DECKS_DIR when it holds no deck yet.
+
+    User decks are never deleted nor overwritten: seeding only happens on an
+    empty decks directory, and any existing file is kept as is.
+    """
+    existing = os.listdir(DECKS_DIR) if os.path.isdir(DECKS_DIR) else []
+    if any(name.endswith(".json") for name in existing):
+        return []
+    if not os.path.isdir(EXAMPLES_DIR):
+        return []
+    os.makedirs(DECKS_DIR, exist_ok=True)
+    seeded = []
+    for name in sorted(os.listdir(EXAMPLES_DIR)):
+        if not name.endswith(".json"):
+            continue
+        target = os.path.join(DECKS_DIR, name)
+        if os.path.exists(target):
+            continue
+        shutil.copyfile(os.path.join(EXAMPLES_DIR, name), target)
+        seeded.append(name)
+    if seeded:
+        print(f"[quick-pick] example_decks_seeded count={len(seeded)} dir={DECKS_DIR}", file=sys.stderr)
+    return seeded
 
 
 class DeckError(Exception):
