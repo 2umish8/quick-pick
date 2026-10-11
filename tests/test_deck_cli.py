@@ -167,5 +167,76 @@ class DeckCliTests(unittest.TestCase):
         self.assertEqual(deck["default_actions"][1]["label"], "Perdre")
 
 
+    def test_resolve_api_key_precedence(self):
+        parser = deck_cli.build_parser()
+        stdin_args = parser.parse_args(["classifier", "--endpoint", "http://x/v1", "--api-key-stdin", "--api-key", "sk-flag"])
+        self.assertEqual(
+            deck_cli.resolve_api_key(stdin_args, env={}, stdin=io.StringIO("sk-stdin\n")),
+            "sk-stdin",
+            "stdin wins over both other sources",
+        )
+
+        env_args = parser.parse_args(["classifier", "--endpoint", "http://x/v1", "--api-key", "sk-flag"])
+        self.assertEqual(
+            deck_cli.resolve_api_key(env_args, env={"QUICK_PICK_API_KEY": " sk-env "}, stdin=io.StringIO("")),
+            "sk-env",
+            "the environment variable wins over the deprecated flag",
+        )
+
+    def test_resolve_api_key_deprecated_flag_warns_on_stderr(self):
+        parser = deck_cli.build_parser()
+        args = parser.parse_args(["classifier", "--endpoint", "http://x/v1", "--api-key", "sk-legacy"])
+        err = io.StringIO()
+        with patch("sys.stderr", err):
+            key = deck_cli.resolve_api_key(args, env={}, stdin=io.StringIO(""))
+        self.assertEqual(key, "sk-legacy")
+        self.assertIn("--api-key-stdin", err.getvalue())
+        self.assertIn("QUICK_PICK_API_KEY", err.getvalue())
+
+    def test_resolve_api_key_stays_silent_for_safe_sources(self):
+        parser = deck_cli.build_parser()
+        args = parser.parse_args(["classifier", "--endpoint", "http://x/v1"])
+        err = io.StringIO()
+        with patch("sys.stderr", err):
+            self.assertEqual(deck_cli.resolve_api_key(args, env={}, stdin=io.StringIO("")), "")
+            self.assertEqual(
+                deck_cli.resolve_api_key(args, env={"QUICK_PICK_API_KEY": "sk-env"}, stdin=io.StringIO("")), "sk-env"
+            )
+        self.assertEqual(err.getvalue(), "")
+
+    def test_handle_classifier_passes_key_from_environment(self):
+        import classifier_proxy
+        parser = deck_cli.build_parser()
+        args = parser.parse_args(["classifier", "--endpoint", "https://api.openai.com/v1"])
+        calls = []
+
+        def fake_test(endpoint, api_key):
+            calls.append((endpoint, api_key))
+            return 200, True, "OK"
+
+        with patch.object(classifier_proxy, "test_external_classifier", fake_test), \
+                patch.dict(os.environ, {"QUICK_PICK_API_KEY": "sk-env"}), \
+                patch("sys.stdout", io.StringIO()):
+            deck_cli.handle_classifier(args)
+
+        self.assertEqual(calls, [("https://api.openai.com/v1", "sk-env")])
+
+    def test_handle_classifier_still_accepts_deprecated_flag(self):
+        import classifier_proxy
+        parser = deck_cli.build_parser()
+        args = parser.parse_args(["classifier", "--endpoint", "https://api.openai.com/v1", "--api-key", "sk-legacy"])
+        calls = []
+
+        def fake_test(endpoint, api_key):
+            calls.append((endpoint, api_key))
+            return 200, True, "OK"
+
+        with patch.object(classifier_proxy, "test_external_classifier", fake_test), \
+                patch("sys.stdout", io.StringIO()), patch("sys.stderr", io.StringIO()):
+            deck_cli.handle_classifier(args)
+
+        self.assertEqual(calls, [("https://api.openai.com/v1", "sk-legacy")])
+
+
 if __name__ == "__main__":
     unittest.main()
