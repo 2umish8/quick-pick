@@ -14,7 +14,7 @@
 - CI GitHub Actions (unittest, ruff, node --check), image Docker épinglée et non-root avec healthcheck, CONTRIBUTING/SECURITY, `data/` n'est plus versionné et les decks d'exemple sont seedés au premier lancement (#4).
 
 ### Mise à niveau
-1. Decks existants : aucune migration ; le seed n'écrit que les exemples absents et n'écrase jamais un deck. Si vous suiviez `data/decks/` dans un fork, ces fichiers ne sont plus versionnés (vos fichiers locaux restent en place).
+1. Decks existants : aucune migration ; les decks d'exemple ne sont copiés que si le dossier de decks ne contient encore aucun deck, et aucun fichier existant n'est écrasé. Si vous suiviez `data/decks/` dans un fork, ces fichiers ne sont plus versionnés (vos fichiers locaux restent en place).
 2. Docker : l'image tourne désormais en UID 10001 ; Compose lance le conteneur avec votre UID (`QUICK_PICK_UID`/`QUICK_PICK_GID`, défaut 1000). Reconstruisez l'image (`docker compose build`). `QUICK_PICK_TOKEN` reste obligatoire (depuis 2.0.1).
 3. Clé API du classifieur : une clé déjà stockée en `localStorage` reste utilisable. Le CLI affiche un avertissement si `--api-key` est utilisé ; préférez `QUICK_PICK_API_KEY`.
 4. Mode direct vers un fournisseur auto-hébergé : ajoutez son origine dans `QUICK_PICK_CSP_CONNECT_SRC`.
