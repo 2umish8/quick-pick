@@ -1,7 +1,7 @@
 # Quick-Pick : brouillons de lancement (MOW-190)
 
 Brouillons uniquement, rien n'est publié. Aucun chiffre d'usage : n'en ajoutez pas tant qu'on n'en a pas de réels.
-Pré-requis avant toute publication : GIF `docs/demo.gif` en place, README anglais poussé sur `main` (après accord de Mischael), phrase BYOK alignée avec l'état de MOW-188 au moment du post.
+Pré-requis avant toute publication : GIF `docs/demo.gif` en place (et décommenter la ligne TODO des README). README anglais et MOW-188 (mode direct navigateur, jeton d'API) sont livrés en v2.1.0 : les brouillons ci-dessous en tiennent compte.
 
 ---
 
@@ -25,14 +25,13 @@ Recommandé : 1 (l'angle agent est le plus distinctif). Lien : https://github.co
 >
 > Stack: Python standard library only (`python3 server.py`, no pip install), vanilla JS front end, decks stored as plain JSON files, Docker Compose if you prefer. Optional AI suggestions per card with your own key, through any OpenAI-compatible API (OpenAI, Groq, OpenRouter, local Ollama) or a custom webhook. MIT licensed.
 >
-> Caveats: it's meant for a single user or a small internal team, there's no built-in auth (put it behind a reverse proxy or Tailscale), and the UI strings are in French for now.
+> Caveats: it's meant for a single user or a small internal team; auth is a single shared API token (required as soon as it listens beyond localhost), so for internet exposure put it behind a reverse proxy or Tailscale. The UI strings are in French for now.
 >
 > What I'd like feedback on:
 > - If you use coding agents: is "agent asks, human swipes, agent reads back" a workflow you'd actually use, or do you handle this differently?
 > - The deck format and CLI: anything missing for your agent setup?
-> - The BYOK proxy design (the key currently goes through the local server to reach the model API): would you prefer direct browser calls?
+> - The BYOK design: by default the key goes through your own Quick-Pick server, with an opt-in direct browser mode for CORS-enabled providers. Which would you use?
 
-Note : adapter la dernière question si MOW-188 (appel direct depuis le navigateur) est livré avant le post.
 
 ---
 
@@ -50,11 +49,11 @@ Note : adapter la dernière question si MOW-188 (appel direct depuis le navigate
 >
 > Why it might fit here:
 > - Zero dependencies: `python3 server.py` with the standard library only, no pip install, no build step.
-> - Or `docker compose up -d`, port 8791, decks persisted as plain JSON in `./data/decks`.
+> - Or `docker compose up -d` (with `QUICK_PICK_TOKEN` set), port 8791 on localhost, decks persisted as plain JSON in `./data/decks`.
 > - Optional AI suggestions per card using your own endpoint: a local Ollama works (`http://localhost:11434/v1`), as do OpenAI-compatible APIs or a custom webhook.
 > - A CLI (`deck_cli.py`) to create decks and pull a Markdown/JSON summary, so scripts or AI agents can feed it.
 >
-> Honest limitations: no built-in auth (it's meant to sit behind your reverse proxy / Authelia / Tailscale), single user or small team, UI in French for now.
+> Honest limitations: auth is a single shared API token (Docker requires it and publishes on 127.0.0.1 only), so for remote access it's meant to sit behind your reverse proxy / Authelia / Tailscale; single user or small team; UI in French for now.
 >
 > MIT, repo: https://github.com/2umish8/quick-pick
 >
@@ -68,7 +67,7 @@ Note : adapter la dernière question si MOW-188 (appel direct depuis le navigate
 
 > When I work with agents, I end up answering long lists of small questions in chat. Quick-Pick turns those into a deck of cards: the agent creates the deck from JSON, I swipe through it (or use the keyboard), and the agent reads my decisions back with `deck_cli.py summary`.
 >
-> The local-model part: each card can show a suggested action from any OpenAI-compatible endpoint. I use it with Ollama (`http://localhost:11434/v1`, e.g. `llama3.2` or `mistral`); OpenAI, Groq and OpenRouter work too, or a custom webhook. The model gets the card's title, description, bullets and the candidate actions, and returns `{action, confidence, reasoning}`. Nothing is required: without a model it's just a fast manual triage UI.
+> The local-model part: each card can show a suggested action from any OpenAI-compatible endpoint. I use it with Ollama (`http://localhost:11434/v1`, e.g. `llama3.2` or `mistral`; local endpoints are opt-in with `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`); OpenAI, Groq and OpenRouter work too, or a custom webhook. The model gets the card's title, description, bullets and the candidate actions, and returns `{action, confidence, reasoning}`. Nothing is required: without a model it's just a fast manual triage UI.
 >
 > Runs on Python's standard library only (or Docker Compose), decks are plain JSON, MIT.
 >
@@ -145,7 +144,7 @@ Note : vérifier les règles du sub choisi (r/ClaudeAI exige souvent un flair et
 >
 > Ça sert aussi sans agent : trier un backlog, une relecture de code, une liste d'idées.
 >
-> C'est encore jeune (l'interface est en français pour l'instant, pas d'authentification intégrée). Si vous travaillez avec des agents de code, je suis preneur de vos retours : est-ce que ce mode « l'agent demande, l'humain swipe » vous parle ?
+> C'est encore jeune (l'interface est en français pour l'instant, et l'authentification se limite à un jeton d'API partagé). Si vous travaillez avec des agents de code, je suis preneur de vos retours : est-ce que ce mode « l'agent demande, l'humain swipe » vous parle ?
 >
 > Le repo : https://github.com/2umish8/quick-pick
 >
