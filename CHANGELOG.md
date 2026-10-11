@@ -1,5 +1,24 @@
 # CHANGELOG Quick-Pick
 
+## 2.1.0 — 2026-10-11
+
+### Nouveautés
+- Création d'un deck depuis l'écran d'accueil (une ligne = une carte) et endpoint `POST /api/decks` (409 si le deck existe déjà, jamais d'écrasement) (#8, MOW-189).
+- Mode d'appel direct optionnel depuis le navigateur pour les fournisseurs compatibles OpenAI autorisant CORS ; le mode via le serveur reste le défaut (#6).
+
+### Sécurité et robustesse (MOW-188)
+- CSP stricte (aucun script/style inline) et `Permissions-Policy` restrictive ; origines supplémentaires via `QUICK_PICK_CSP_CONNECT_SRC` (#6).
+- Clé BYOK conservée en `sessionStorage` par défaut (option « Mémoriser sur cet appareil ») ; le CLI lit la clé depuis `QUICK_PICK_API_KEY` ou `--api-key-stdin` (#6).
+- Échappement HTML de tous les champs de deck, réponses 4xx sur payload/deck invalide, timeout de requête et bannière « Réessayer » (#5).
+- Mobile et accessibilité : dock d'actions tactile sous 640px, vrais boutons avec focus visible, tiroir en dialogue modal, `aria-keyshortcuts` (#7).
+- CI GitHub Actions (unittest, ruff, node --check), image Docker épinglée et non-root avec healthcheck, CONTRIBUTING/SECURITY, `data/` n'est plus versionné et les decks d'exemple sont seedés au premier lancement (#4).
+
+### Mise à niveau
+1. Decks existants : aucune migration ; les decks d'exemple ne sont copiés que si le dossier de decks ne contient encore aucun deck, et aucun fichier existant n'est écrasé. Si vous suiviez `data/decks/` dans un fork, ces fichiers ne sont plus versionnés (vos fichiers locaux restent en place).
+2. Docker : l'image tourne désormais en UID 10001 ; Compose lance le conteneur avec votre UID (`QUICK_PICK_UID`/`QUICK_PICK_GID`, défaut 1000). Reconstruisez l'image (`docker compose build`). `QUICK_PICK_TOKEN` reste obligatoire (depuis 2.0.1).
+3. Clé API du classifieur : une clé déjà stockée en `localStorage` reste utilisable. Le CLI affiche un avertissement si `--api-key` est utilisé ; préférez `QUICK_PICK_API_KEY`.
+4. Mode direct vers un fournisseur auto-hébergé : ajoutez son origine dans `QUICK_PICK_CSP_CONNECT_SRC`.
+
 ## 2.0.1 — 2026-10-11 — sécurité (GHSA-33mm-m373-c8vj)
 
 ### Changements notables
