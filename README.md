@@ -35,6 +35,18 @@ docker compose up -d
 ```
 👉 Le service est immédiatement opérationnel avec persistance des données dans `./data/decks`. Ouvrez ensuite **`http://localhost:8791/#token=<votre-jeton>`** : le jeton est conservé pour la session de l'onglet uniquement (jamais dans la chaîne de requête), puis retiré du fragment d'URL, et joint automatiquement à chaque appel d'API. Sur une machine de confiance, ajoutez `&remember=1` (`#token=<jeton>&remember=1`) pour le conserver dans le `localStorage` ; sinon, vous pouvez aussi le saisir à l'invite affichée en cas de `401 unauthorized`.
 
+L'image Docker est figée sur un digest (`python:3.12-alpine`), tourne sous un utilisateur non privilégié
+(`quickpick`, UID 10001) et expose un `HEALTHCHECK` sur `/api/health`. Docker Compose lance le conteneur
+avec l'UID de l'hôte (1000 par défaut) pour que le dossier `./data/decks` monté reste accessible :
+
+```bash
+# Si votre UID Linux est différent de 1000 :
+export QUICK_PICK_UID=$(id -u) QUICK_PICK_GID=$(id -g)
+docker compose up -d
+```
+
+Vérification rapide : `docker compose ps` doit afficher `(healthy)`, `curl http://localhost:8791/api/health` doit répondre `{"ok": true, ...}`.
+
 ---
 
 ## 🛠️ Variables d'Environnement

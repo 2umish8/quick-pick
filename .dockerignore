@@ -1,0 +1,27 @@
+# Keep the build context small and leak-free: no VCS metadata, no user decks,
+# no tests, no local configuration or secrets.
+.git
+.github
+.gitignore
+.dockerignore
+data/
+tests/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+node_modules/
+.env
+.env.*
+*.tmp
+*.log
+LOT_REPORT.md
+CONTRIBUTING.md
+SECURITY.md
+docker-compose.yml
+Dockerfile
