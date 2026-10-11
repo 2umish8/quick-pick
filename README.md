@@ -66,7 +66,7 @@ Vérification rapide : `docker compose ps` doit afficher `(healthy)`, `curl http
 |---|---|---|
 | `QUICK_PICK_HOST` | `127.0.0.1` (`0.0.0.0` dans Docker) | Adresse IP d'écoute du serveur |
 | `QUICK_PICK_PORT` | `8791` | Port d'écoute HTTP |
-| `QUICK_PICK_DATA_DIR` | `./data/decks` | Dossier de stockage des fichiers JSON de decks |
+| `QUICK_PICK_DATA_DIR` | `./data/decks` | Dossier de stockage des fichiers JSON de decks (non versionné, seedé depuis `examples/decks/` au premier lancement) |
 | `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS` | `0` | Autoriser le proxy IA à requêter des endpoints privés/locaux (ex : Ollama sur `127.0.0.1:11434`). Mettre à `1` pour utiliser un LLM local (voir § Assistance IA) |
 | `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS` | (vide) | Liste optionnelle de noms d'hôtes autorisés pour le proxy IA, séparés par des virgules (ex : `api.openai.com`). Si renseignée, tout endpoint dont l'hôte n'est pas listé est refusé |
 | `QUICK_PICK_TOKEN` | (vide) | Jeton d'authentification de l'API (`Authorization: Bearer <jeton>` ou `X-Quick-Pick-Token: <jeton>`). Obligatoire si le serveur écoute sur une adresse non locale |
@@ -155,6 +155,11 @@ python3 deck_cli.py delete sprint-42
 
 ## 📄 Format d'un Deck (`data/decks/<id>.json`)
 
+Le dossier `data/` n'est **pas** versionné : il contient vos decks. Au premier lancement, s'il ne
+contient aucun deck, les decks d'exemple de `examples/decks/` y sont copiés tels quels. Un deck
+existant n'est jamais écrasé ni supprimé (ni au démarrage, ni pendant une mise à jour) : pour repartir
+des exemples, supprimez le fichier concerné de `data/decks/` puis relancez le serveur.
+
 Chaque deck est un document JSON autonome :
 
 ```json
@@ -200,8 +205,11 @@ Quick-Pick est conçu comme une application mono-utilisateur ou d'équipe intern
 ## 🧪 Tests
 
 ```bash
-python3 -m unittest discover tests
+PYTHONPATH=. python3 -m unittest discover -s tests
+ruff check .                                        # optionnel : pip install -e ".[dev]"
 ```
+
+Les mêmes vérifications tournent dans la CI à chaque pull request.
 
 ---
 

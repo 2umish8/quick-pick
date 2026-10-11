@@ -11,6 +11,7 @@ from deck_store import (
     load_deck,
     reset_deck,
     save_deck,
+    seed_example_decks,
 )
 from deck_summary import compute_deck_summary
 
@@ -222,6 +223,7 @@ def build_parser():
 def main():
     parser = build_parser()
     args = parser.parse_args()
+    seed_example_decks()
     try:
         args.func(args)
     except (DeckError, json.JSONDecodeError, OSError) as err:
