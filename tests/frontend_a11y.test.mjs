@@ -18,3 +18,18 @@ test("the action dock stays usable by finger under 640px", () => {
   assert.match(mobile, /\.action-key-button\s*\{[^}]*min-height:\s*(4[4-9]|[5-9]\d|\d{3,})px/);
   assert.match(css, /\.comment-input\s*\{[^}]*height:\s*(4[4-9]|[5-9]\d|\d{3,})px/);
 });
+
+test("clickable deck and logo zones are real buttons", () => {
+  const html = read("index.html");
+  assert.match(html, /<button type="button" class="logo-zone" id="logo-zone"[^>]*aria-label="Retour aux decks">/);
+  const appJs = read("app.js");
+  assert.match(appJs, /<button type="button" class="deck-item-card"/);
+  assert.ok(!/<div class="deck-item-card"/.test(appJs), "deck cards must not stay divs");
+});
+
+test("a global :focus-visible ring exists and no stylesheet resets outlines", () => {
+  assert.match(read("style.css"), /:focus-visible\s*\{[^}]*outline:/);
+  for (const file of ["style.css", "cards.css", "drawer.css"]) {
+    assert.ok(!/outline:\s*none/.test(read(file)), `${file} still disables outlines`);
+  }
+});

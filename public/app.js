@@ -71,11 +71,11 @@ async function loadDecks() {
   }
   hideErrorBanner();
   dom.deckList.innerHTML = (data.decks || []).map(deck => `
-    <div class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}">
+    <button type="button" class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}">
       <div class="deck-item-category">${escapeHtml(deck.category || "PROJET")}</div>
       <div class="deck-item-title">${escapeHtml(deck.title)}</div>
       <div class="deck-item-desc">${escapeHtml(deck.description || "")}</div>
-    </div>
+    </button>
   `).join("");
   dom.deckList.querySelectorAll(".deck-item-card").forEach(el => {
     el.addEventListener("click", () => startDeck(el.dataset.deckId));
