@@ -1,6 +1,6 @@
 # CHANGELOG Quick-Pick
 
-## Unreleased — sécurité
+## 2.0.1 — 2026-10-11 — sécurité (GHSA-33mm-m373-c8vj)
 
 ### Changements notables
 - Le proxy du classifieur refuse désormais par défaut les endpoints privés et locaux (`QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS` vaut `0`). Les redirections HTTP ne sont plus suivies et chaque endpoint est résolu une seule fois avant connexion.
