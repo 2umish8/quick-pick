@@ -48,7 +48,33 @@ class DeckError(Exception):
     """Erreur explicite de validation ou manipulation des decks."""
 
 
+class DeckExistsError(DeckError):
+    """Le deck demandé existe déjà : jamais d'écrasement silencieux."""
+
+
 DECK_ID_REGEX = re.compile(r"^[a-zA-Z0-9_\-]{1,128}$")
+
+MAX_DECK_TITLE_LENGTH = 120
+MAX_DECK_ITEMS = 200
+MAX_ITEM_TITLE_LENGTH = 500
+
+# Modèles d'actions déclaratifs, cohérents avec SKILL.md et deck_cli.
+ACTION_TEMPLATES = {
+    "triage": [
+        {"id": "approve", "label": "Conserver / Valider", "direction": "east", "key": "d", "color": "success"},
+        {"id": "reject", "label": "Élaguer / Rejeter", "direction": "west", "key": "a", "color": "danger"},
+        {"id": "review", "label": "À revoir / Modifier", "direction": "north", "key": "w", "color": "warning"},
+    ],
+    "binary": [
+        {"id": "approve", "label": "Oui / Valider", "direction": "east", "key": "d", "color": "success"},
+        {"id": "reject", "label": "Non / Rejeter", "direction": "west", "key": "a", "color": "danger"},
+    ],
+    "priority": [
+        {"id": "now", "label": "Immédiat", "direction": "east", "key": "d", "color": "success"},
+        {"id": "drop", "label": "Ignorer", "direction": "west", "key": "a", "color": "danger"},
+        {"id": "later", "label": "Plus tard", "direction": "north", "key": "w", "color": "warning"},
+    ],
+}
 
 
 def resolve_deck_path(deck_id):
@@ -98,6 +124,71 @@ def save_deck(deck_id, deck_data):
         json.dump(deck_data, handle, ensure_ascii=False, indent=2)
         handle.write("\n")
     os.replace(tmp_path, file_path)
+
+
+def deck_exists(deck_id):
+    return os.path.isfile(resolve_deck_path(deck_id))
+
+
+def _slugify_deck_id(title):
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:64].strip("-")
+    return slug or "deck"
+
+
+def _unique_deck_id(base_id):
+    candidate, suffix = base_id, 2
+    while deck_exists(candidate):
+        candidate = f"{base_id}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def create_deck(title, items, template="triage", deck_id=None):
+    """Crée et persiste un deck depuis une liste brute (une ligne = une carte)."""
+    clean_title = str(title or "").strip()
+    if not clean_title:
+        raise DeckError("Titre de deck obligatoire")
+    if len(clean_title) > MAX_DECK_TITLE_LENGTH:
+        raise DeckError(f"Titre trop long (max {MAX_DECK_TITLE_LENGTH} caractères)")
+    if template not in ACTION_TEMPLATES:
+        raise DeckError(f"Modèle d'actions inconnu : {template!r}")
+    if not isinstance(items, list):
+        raise DeckError("La liste des cartes doit être un tableau de lignes")
+
+    cards = []
+    for position, raw in enumerate(items, start=1):
+        line = str(raw or "").strip()
+        if not line:
+            continue
+        if len(line) > MAX_ITEM_TITLE_LENGTH:
+            raise DeckError(f"Carte #{position} trop longue (max {MAX_ITEM_TITLE_LENGTH} caractères)")
+        cards.append(line)
+    if not cards:
+        raise DeckError("Ajoutez au moins une carte à trancher")
+    if len(cards) > MAX_DECK_ITEMS:
+        raise DeckError(f"Maximum {MAX_DECK_ITEMS} cartes par deck")
+
+    if deck_id is not None and str(deck_id).strip():
+        target_id = str(deck_id).strip()
+        resolve_deck_path(target_id)  # rejette les ids dangereux (traversée, espaces, ..)
+        if deck_exists(target_id):
+            raise DeckExistsError(f"Un deck nommé '{target_id}' existe déjà")
+    else:
+        target_id = _unique_deck_id(_slugify_deck_id(clean_title))
+
+    deck = {
+        "id": target_id,
+        "title": clean_title,
+        "description": "",
+        "category": "GÉNÉRAL",
+        "default_actions": ACTION_TEMPLATES[template],
+        "items": [
+            {"id": f"item-{index}", "title": line, "status": "pending", "chosen_action": None, "decided_at": None}
+            for index, line in enumerate(cards, start=1)
+        ],
+    }
+    save_deck(target_id, deck)
+    return deck
 
 
 def delete_deck(deck_id):

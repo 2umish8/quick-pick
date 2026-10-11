@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 import deck_store
-from deck_store import DeckError, find_deck_state, list_available_decks, load_deck, save_deck, resolve_item_actions
+from deck_store import DeckError, DeckExistsError, create_deck, find_deck_state, list_available_decks, load_deck, save_deck, resolve_item_actions
 from deck_summary import compute_deck_summary
 
 BIND_HOST = os.environ.get("QUICK_PICK_HOST", "127.0.0.1")
@@ -348,6 +348,21 @@ class QuickPickHandler(BaseHTTPRequestHandler):
                 except Exception as err:
                     return self.send_json(400, {"ok": False, "error": str(err)})
             return self.send_json(404, {"error": "action_inconnue"})
+
+        if len(p) == 2 and p[0] == "api" and p[1] == "decks":
+            try:
+                deck = create_deck(
+                    title=payload.get("title"),
+                    items=payload.get("items"),
+                    template=payload.get("template") or "triage",
+                    deck_id=payload.get("id"),
+                )
+            except DeckExistsError as err:
+                return self.send_json(409, {"error": str(err)})
+            except DeckError as err:
+                return self.send_json(400, {"error": str(err)})
+            with STATE_LOCK:
+                return self.send_json(201, {"ok": True, "deck_id": deck["id"], "deck": find_deck_state(deck)})
 
         if len(p) < 4 or p[0] != "api" or p[1] != "decks": return self.send_json(404, {"error": "not_found"})
         deck_id, action = p[2], p[3]
