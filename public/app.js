@@ -4,6 +4,7 @@ import { escapeHtml } from "./escape.js";
 import { renderStack, attachClassifierSuggestion } from "./stack.js";
 import { initDrawer, openDrawer, updateDrawerState } from "./deck-drawer.js";
 import { initSettingsModal, fetchItemPrediction } from "./classifier.js";
+import { initDeckForm } from "./deck-form.js";
 
 const state = { activeDeckId: null, deckData: null, isProcessing: false, currentView: "decks" };
 
@@ -70,13 +71,16 @@ async function loadDecks() {
     return;
   }
   hideErrorBanner();
-  dom.deckList.innerHTML = (data.decks || []).map(deck => `
+  const decks = data.decks || [];
+  dom.deckList.innerHTML = decks.length
+    ? decks.map(deck => `
     <button type="button" class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}">
       <div class="deck-item-category">${escapeHtml(deck.category || "PROJET")}</div>
       <div class="deck-item-title">${escapeHtml(deck.title)}</div>
       <div class="deck-item-desc">${escapeHtml(deck.description || "")}</div>
     </button>
-  `).join("");
+  `).join("")
+    : `<p class="deck-list-empty">Aucun deck pour l'instant. Créez le premier ci-dessous, ou posez une liste et commencez à trier.</p>`;
   dom.deckList.querySelectorAll(".deck-item-card").forEach(el => {
     el.addEventListener("click", () => startDeck(el.dataset.deckId));
   });
@@ -181,10 +185,14 @@ function ariaKeyShortcuts(action) {
 async function showSummary() {
   switchView("summary");
   const summary = await fetchSummary(state.activeDeckId);
+  // Libellés lisibles partout (jamais les ids d'actions bruts)
+  const labelById = Object.fromEntries(
+    (state.deckData?.decided_items || []).map(entry => [entry.chosen_action, entry.action_label])
+  );
   const breakdownHtml = Object.entries(summary.actions_breakdown || {}).map(([actId, count]) => `
     <div class="summary-stat-card">
       <span class="summary-stat-val">${escapeHtml(String(count))}</span>
-      <span class="summary-stat-label">${escapeHtml(actId)}</span>
+      <span class="summary-stat-label">${escapeHtml(labelById[actId] || actId)}</span>
     </div>
   `).join("");
 
@@ -211,14 +219,45 @@ async function showSummary() {
     ${breakdownHtml ? `<div class="summary-stats-grid">${breakdownHtml}</div>` : ""}
     ${entriesHtml ? `<div class="summary-list">${entriesHtml}</div>` : ""}
     <div class="recap-actions-row">
+      <button class="recap-btn secondary" id="btn-copy-markdown">Copier en Markdown</button>
       <button class="recap-btn primary" id="btn-back-decks">Retour aux sujets</button>
     </div>
   `;
+  document.getElementById("btn-copy-markdown")?.addEventListener("click", async (event) => {
+    const btn = event.currentTarget;
+    try {
+      await navigator.clipboard.writeText(buildMarkdownRecap(summary, labelById));
+      btn.textContent = "Copié";
+    } catch {
+      btn.textContent = "Copie impossible";
+    }
+  });
   document.getElementById("btn-back-decks")?.addEventListener("click", loadDecks);
+}
+
+function buildMarkdownRecap(summary, labelById) {
+  const lines = [
+    `# Synthèse Quick-Pick : ${summary.title || summary.deck_id}`,
+    "",
+    `- **Progression** : ${summary.total_decided}/${summary.total_items} décidés`,
+    `- **Temps total** : ${summary.elapsed_seconds}s`,
+    "",
+    "## Détail des décisions",
+  ];
+  for (const entry of summary.entries || []) {
+    const label = labelById[entry.chosen_action] || entry.action_label || entry.chosen_action;
+    const comment = entry.comment ? ` — *« ${entry.comment} »*` : "";
+    lines.push(`- [${label}] **${entry.title}**${comment}`);
+  }
+  return lines.join("\n");
 }
 
 function initKeyboard() {
   window.addEventListener("keydown", async (e) => {
+    // Les raccourcis de jeu ne doivent jamais voler la frappe des champs de saisie
+    const isTyping = e.target instanceof HTMLElement
+      && Boolean(e.target.closest("input, textarea, select, [contenteditable]"));
+    if (isTyping || state.currentView !== "game") return;
     const isInputActive = (document.activeElement === dom.commentInput);
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && state.deckData?.can_undo) {
       e.preventDefault();
@@ -287,6 +326,7 @@ function getInitialDeckId() {
 }
 
 // Initialisation
+initDeckForm({ onCreated: (deckId) => startDeck(deckId) });
 initDrawer({ onUndoItem: (itemId) => triggerUndo(itemId) });
 initSettingsModal();
 initKeyboard();
