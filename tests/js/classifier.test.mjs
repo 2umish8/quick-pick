@@ -1,6 +1,5 @@
-// Tests de stockage de la clé BYOK (public/classifier.js) — run: node --test tests/
+// Tests de stockage de la clé BYOK (public/classifier.js) — run: node --test tests/js/*.test.mjs
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 function makeStorage(initial = {}) {
@@ -13,14 +12,16 @@ function makeStorage(initial = {}) {
   };
 }
 
-// classifier.js is plain ESM without import/export of any asset: loading it from a
-// data URL keeps the repo dependency-free and lets us stub the storage globals.
-const source = await readFile(new URL("../public/classifier.js", import.meta.url), "utf8");
+// classifier.js imports ./api.js, so it is loaded from its file URL; a unique query string
+// gives every test a fresh module instance with its own stubbed storage globals.
+const CLASSIFIER_URL = new URL("../../public/classifier.js", import.meta.url);
+let loadCount = 0;
+const freshClassifier = () => import(`${CLASSIFIER_URL.href}?t=${++loadCount}`);
 
 async function loadClassifier(localStorage, sessionStorage) {
   globalThis.localStorage = localStorage;
   globalThis.sessionStorage = sessionStorage;
-  return import(`data:text/javascript,${encodeURIComponent(source)}`);
+  return freshClassifier();
 }
 
 const STORAGE_KEY = "quickpick_classifier_cfg";
@@ -116,7 +117,7 @@ function loadClassifierWithFetch(local = makeStorage(), session = makeStorage(),
   globalThis.localStorage = local;
   globalThis.sessionStorage = session;
   globalThis.fetch = fetchImpl;
-  return import(`data:text/javascript,${encodeURIComponent(source)}`);
+  return freshClassifier();
 }
 
 test("direct mode stays off unless the user opts in", async () => {
@@ -221,7 +222,7 @@ test("proxy mode stays the default transport", async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
     calls.push({ url, options });
-    return { ok: true, status: 200, statusText: "OK", json: async () => ({ ok: true, data: { prediction: "reject", confidence: 0.4 } }) };
+    return { ok: true, status: 200, statusText: "OK", headers: new Headers({ "content-type": "application/json" }), json: async () => ({ ok: true, data: { prediction: "reject", confidence: 0.4 } }) };
   };
   const session = makeStorage({
     [STORAGE_KEY]: JSON.stringify({
