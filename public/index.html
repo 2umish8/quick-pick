@@ -91,7 +91,8 @@
       </div>
       <div class="settings-field">
         <label for="cfg-endpoint" class="settings-label">Base URL ou Endpoint</label>
-        <input type="url" id="cfg-endpoint" class="settings-input" placeholder="https://api.openai.com/v1 ou http://localhost:11434/v1" autocomplete="off" />
+        <input type="url" id="cfg-endpoint" class="settings-input" placeholder="https://api.openai.com/v1" autocomplete="off" />
+        <small class="settings-hint">Endpoints locaux comme <code>http://localhost:11434/v1</code> (Ollama) exigent <code>QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1</code> côté serveur.</small>
       </div>
       <div class="settings-field" id="field-model-container">
         <label for="cfg-model" class="settings-label">Modèle (OpenAI / Ollama)</label>

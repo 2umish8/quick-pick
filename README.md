@@ -33,7 +33,7 @@ python3 server.py
 export QUICK_PICK_TOKEN="un-jeton-long-et-aleatoire"
 docker compose up -d
 ```
-👉 Le service est immédiatement opérationnel avec persistance des données dans `./data/decks`. Ouvrez ensuite **`http://localhost:8791/?token=un-jeton-long-et-aleatoire`** : le jeton est enregistré dans le navigateur (puis retiré de l'URL) et joint automatiquement à chaque appel d'API.
+👉 Le service est immédiatement opérationnel avec persistance des données dans `./data/decks`. Ouvrez ensuite **`http://localhost:8791/#token=<votre-jeton>`** : le jeton est conservé pour la session de l'onglet uniquement (jamais dans la chaîne de requête), puis retiré du fragment d'URL, et joint automatiquement à chaque appel d'API. Sur une machine de confiance, ajoutez `&remember=1` (`#token=<jeton>&remember=1`) pour le conserver dans le `localStorage` ; sinon, vous pouvez aussi le saisir à l'invite affichée en cas de `401 unauthorized`.
 
 ---
 
@@ -64,7 +64,7 @@ Quick-Pick n'impose aucun modèle payant ou propriétaire. Cliquez sur l'icône 
 2. **Webhook / API Custom** :
    - Renseignez l'URL de votre endpoint de scoring interne recevant le payload `{ id, title, description, bullets, candidate_actions }`.
 
-> **LLM local (Ollama) :** les endpoints privés et locaux sont bloqués par défaut. Pour utiliser Ollama ou un modèle local, démarrez le serveur avec `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. En Docker, le conteneur ne peut pas joindre `127.0.0.1` de l'hôte : utilisez `host.docker.internal` comme hôte d'endpoint (ex : `http://host.docker.internal:11434/v1`) avec `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. Pour restreindre davantage le proxy, renseignez `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS` (ex : `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS=api.openai.com`).
+> **LLM local (Ollama) :** les endpoints privés et locaux sont bloqués par défaut. Pour utiliser Ollama ou un modèle local, démarrez le serveur avec `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. En Docker, le conteneur ne peut pas joindre `127.0.0.1` de l'hôte : utilisez `host.docker.internal` comme hôte d'endpoint (ex : `http://host.docker.internal:11434/v1`) avec `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. Sous Linux, décommentez le bloc `extra_hosts` du `docker-compose.yml` pour résoudre `host.docker.internal` via `host-gateway`. Pour restreindre davantage le proxy, renseignez `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS` (ex : `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS=api.openai.com`).
 
 ---
 
@@ -169,7 +169,8 @@ Quick-Pick est conçu comme une application mono-utilisateur ou d'équipe intern
 - Pour une exposition publique sur Internet, placez-le derrière un reverse-proxy avec authentification (Caddy avec Basic Auth, Traefik, Authelia, Cloudflare Access ou réseau privé Tailscale).
 - En-têtes de sécurité intégrés par défaut (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`).
 - Protection contre l'exfiltration de métadonnées cloud (AWS/GCP) et limitation de taille de payload (2 Mo).
-- Durcissement intégré : le proxy IA refuse par défaut les adresses privées/locales et ne suit jamais les redirections ; le serveur vérifie l'en-tête `Host`, exige `Content-Type: application/json` sur les requêtes POST et contrôle l'en-tête `Origin`. Si le serveur écoute sur une adresse non locale (`QUICK_PICK_HOST=0.0.0.0`, Docker), un `QUICK_PICK_TOKEN` est exigé au démarrage et chaque appel `/api/*` doit le présenter.
+- Durcissement intégré : le proxy IA refuse par défaut les adresses privées/locales et ne suit jamais les redirections ; le serveur vérifie l'en-tête `Host`, exige `Content-Type: application/json` sur les requêtes POST et contrôle l'en-tête `Origin`. Si le serveur écoute sur une adresse non locale (`QUICK_PICK_HOST=0.0.0.0`, Docker), un `QUICK_PICK_TOKEN` est exigé au démarrage et chaque appel `/api/*` doit le présenter. Le jeton ne transite jamais par la chaîne de requête : passez-le dans le fragment d'URL (`http://localhost:8791/#token=<jeton>`, conservé pour la session de l'onglet ; `&remember=1` pour le persister dans le `localStorage` sur une machine de confiance) ou saisissez-le à l'invite.
+- Sur les réseaux utilisant un DNS « fake-IP » (`198.18.0.0/15`, par ex. certains VPN/proxys/bacs à sable comme les modes Clash/Surge/TUN), les noms d'hôtes d'API publiques résolvent vers des adresses non globales et sont donc refusés par défaut. Contournement : désactivez le fake-IP pour ces domaines / utilisez un vrai DNS, ou (en connaissance de cause) combinez `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1` avec `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS=api.openai.com` pour restreindre les cibles.
 
 ---
 

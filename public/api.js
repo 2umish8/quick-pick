@@ -1,31 +1,88 @@
 // REST API module for quick-pick
+// Runs at module load, before app.js reads location.hash (app.js imports this module first).
 const TOKEN_KEY = "quickPickToken";
 
 export function getToken() {
   try {
-    return localStorage.getItem(TOKEN_KEY) || "";
+    return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || "";
   } catch {
     return "";
   }
 }
 
-// Capture ?token=... once, persist it, then strip it from the URL.
-function captureTokenFromURL() {
+export function setToken(token, remember = false) {
   try {
-    const params = new URLSearchParams(location.search);
-    const token = params.get("token");
-    if (token) {
+    if (remember) {
       localStorage.setItem(TOKEN_KEY, token);
-      params.delete("token");
-      const query = params.toString();
-      history.replaceState(null, "", location.pathname + (query ? `?${query}` : "") + location.hash);
+    } else {
+      sessionStorage.setItem(TOKEN_KEY, token);
     }
+  } catch {
+    // Storage unavailable (private mode): stay unauthenticated.
+  }
+}
+
+export function clearToken() {
+  try {
+    sessionStorage.removeItem(TOKEN_KEY);
+  } catch {}
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {}
+}
+
+// Capture #token=... / #<deckId>&token=...[&remember=1] once, persist it, strip it from the hash.
+function captureTokenFromFragment() {
+  try {
+    const raw = location.hash.replace(/^#/, "");
+    if (!raw || !raw.includes("token=")) return;
+    const parts = raw.split("&");
+    let token = null;
+    let remember = false;
+    const kept = [];
+    for (const part of parts) {
+      if (part.startsWith("token=")) {
+        token = decodeURIComponent(part.slice("token=".length));
+      } else if (part === "remember=1") {
+        remember = true;
+      } else if (part) {
+        kept.push(part);
+      }
+    }
+    if (token) setToken(token, remember);
+    // Preserve path+query without ever parsing the query string for tokens.
+    const base = location.href.split("#")[0];
+    const nextUrl = kept.length ? `${base}#${kept.join("&")}` : base;
+    history.replaceState(null, "", nextUrl);
   } catch {
     // Storage or history unavailable (private mode): stay unauthenticated.
   }
 }
 
-captureTokenFromURL();
+captureTokenFromFragment();
+
+async function readErrorBody(response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    try {
+      return await response.json();
+    } catch {
+      return { error: "Erreur de décodage JSON serveur" };
+    }
+  }
+  const text = await response.text();
+  return { error: text || `Erreur serveur (${response.status})` };
+}
+
+function promptForToken() {
+  try {
+    const token = window.prompt("Jeton d'accès quick-pick (QUICK_PICK_TOKEN) :");
+    if (token) setToken(token, false);
+    return token || null;
+  } catch {
+    return null;
+  }
+}
 
 export function authHeaders() {
   const token = getToken();
@@ -33,26 +90,48 @@ export function authHeaders() {
 }
 
 export async function request(endpoint, options = {}) {
-  const response = await fetch(endpoint, {
+  const doFetch = (extraHeaders = {}) => fetch(endpoint, {
     ...options,
-    headers: { "Content-Type": "application/json", ...authHeaders(), ...(options.headers || {}) },
+    headers: { "Content-Type": "application/json", ...authHeaders(), ...(options.headers || {}), ...extraHeaders },
   });
-  let data;
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    try {
-      data = await response.json();
-    } catch {
-      data = { error: "Erreur de décodage JSON serveur" };
-    }
-  } else {
-    const text = await response.text();
-    data = { error: text || `Erreur serveur (${response.status})` };
+  let response = await doFetch();
+  let data = await readErrorBody(response);
+  if (response.status === 401 && data && data.error === "unauthorized") {
+    const token = promptForToken();
+    if (!token) throw new Error(data.detail || data.error || `Erreur serveur (${response.status})`);
+    response = await doFetch();
+    data = await readErrorBody(response);
   }
   if (!response.ok) {
     throw new Error(data.detail || data.error || `Erreur serveur (${response.status})`);
   }
   return data;
+}
+
+// Same 401 -> prompt -> retry flow for raw fetch callers (classifier helpers).
+export async function authFetch(url, options = {}) {
+  let response = await fetch(url, {
+    ...options,
+    headers: { "Content-Type": "application/json", ...authHeaders(), ...(options.headers || {}) },
+  });
+  const contentType = response.headers.get("content-type") || "";
+  if (response.status === 401) {
+    let body = null;
+    try {
+      body = contentType.includes("application/json") ? await response.clone().json() : null;
+    } catch {
+      body = null;
+    }
+    if (body && body.error === "unauthorized") {
+      const token = promptForToken();
+      if (!token) return response;
+      response = await fetch(url, {
+        ...options,
+        headers: { "Content-Type": "application/json", ...authHeaders(), ...(options.headers || {}) },
+      });
+    }
+  }
+  return response;
 }
 
 export function fetchDecks() {

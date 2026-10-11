@@ -77,6 +77,30 @@ class ProxySafeUrlTests(unittest.TestCase, _EnvMixin):
         ok, _msg = classifier_proxy.is_safe_url("http://example.com/api")
         self.assertFalse(ok)
 
+    def test_metadata_ips_always_rejected_even_with_opt_in(self):
+        self.patch_env(QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS="1")
+        for url in ("http://100.100.100.200/", "http://[fd00:ec2::254]/",
+                    "http://[::ffff:100.100.100.200]/"):
+            ok, _msg = classifier_proxy.is_safe_url(url)
+            self.assertFalse(ok, url)
+            with self.assertRaises(ValueError, msg=url):
+                classifier_proxy.query_external_classifier(url, "", {"ping": True})
+
+    def test_metadata_ips_via_hostname_rejected_with_opt_in(self):
+        self.patch_env(QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS="1")
+        cases = [
+            [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("100.100.100.200", 80))],
+            [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("fd00:ec2::254", 80, 0, 0))],
+            [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::ffff:100.100.100.200", 80, 0, 0))],
+        ]
+        for addr_info in cases:
+            with mock.patch("socket.getaddrinfo", return_value=addr_info):
+                ok, _msg = classifier_proxy.is_safe_url("http://example.com/api")
+                self.assertFalse(ok, addr_info)
+                with self.assertRaises(ValueError, msg=str(addr_info)):
+                    classifier_proxy.query_external_classifier(
+                        "http://example.com/api", "", {"ping": True})
+
 
 class _SilentHandler(BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -202,6 +226,30 @@ class ProxyRebindingTests(unittest.TestCase, _EnvMixin):
             with self.assertRaises(ValueError):
                 classifier_proxy.query_external_classifier(
                     "http://example.com/api", "", {"ping": True})
+
+    def test_fallback_through_validated_ips(self):
+        self.patch_env()
+        ipv6 = "2606:2800:220:1:248:1893:25c8:1946"
+        ipv4 = self.PUBLIC_IP
+        addr_info = [
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", (ipv6, 80, 0, 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", (ipv4, 80)),
+        ]
+        recorded = []
+
+        def fake_create_connection(address, timeout=None, source_address=None):
+            recorded.append(address)
+            if address[0] == ipv6:
+                raise OSError("first address down")
+            raise ConnectionRefusedError("boom")
+
+        with mock.patch("socket.getaddrinfo", return_value=addr_info) as gai, \
+                mock.patch("socket.create_connection", side_effect=fake_create_connection):
+            code, _res = classifier_proxy.query_external_classifier(
+                "http://example.com/api", "", {"ping": True})
+            self.assertEqual(code, 500)
+            self.assertEqual(gai.call_count, 1)
+            self.assertEqual(recorded, [(ipv6, 80), (ipv4, 80)])
 
 
 def _raw_request(port, method, path, headers, body=b""):
@@ -444,5 +492,39 @@ class PredictRedirectTests(unittest.TestCase, _EnvMixin):
         self.assertEqual(payload.get("status"), 302)
 
 
+class FrontendRegressionTests(unittest.TestCase):
+    def _public(self, name):
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(base, "public", name), encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_api_token_in_fragment_not_query(self):
+        src = self._public("api.js")
+        self.assertNotIn("location.search", src)
+        self.assertIn("sessionStorage", src)
+
+    def test_app_dock_escapes_deck_data(self):
+        src = self._public("app.js")
+        self.assertIn("escapeHtml(act.id)", src)
+        self.assertIn("escapeHtml(act.color", src)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class FrontendImportGuardTests(unittest.TestCase):
+    """Regression guard: helpers used in classifier.js must be imported."""
+
+    def test_classifier_js_imports_used_api_helpers(self):
+        import re
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "public", "classifier.js"), encoding="utf-8") as fh:
+            src = fh.read()
+        match = re.search(r'import\s*\{([^}]*)\}\s*from\s*"\./api\.js"', src)
+        self.assertIsNotNone(match)
+        imported = {name.strip() for name in match.group(1).split(",")}
+        for helper in ("authFetch", "authHeaders"):
+            if helper + "(" in src:
+                self.assertIn(helper, imported)
+

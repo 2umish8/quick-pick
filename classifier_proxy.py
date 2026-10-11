@@ -13,7 +13,22 @@ from urllib.parse import urlparse
 DEFAULT_TIMEOUT = 6
 
 # Hostnames that always resolve to cloud metadata services.
-_CLOUD_METADATA_HOSTS = {"169.254.169.254", "metadata.google.internal", "instance-data"}
+_CLOUD_METADATA_HOSTS = {
+    "169.254.169.254",
+    "100.100.100.200",
+    "fd00:ec2::254",
+    "metadata.google.internal",
+    "metadata.goog",
+    "metadata",
+    "instance-data",
+}
+
+# Cloud metadata IPs that are ALWAYS rejected, even with the opt-in.
+_ALWAYS_BLOCKED_IPS = frozenset({
+    ipaddress.ip_address("169.254.169.254"),
+    ipaddress.ip_address("100.100.100.200"),
+    ipaddress.ip_address("fd00:ec2::254"),
+})
 
 
 def _allow_private_endpoints():
@@ -42,6 +57,8 @@ def _candidate_ips(ip):
 def _ip_blocked_always(ip):
     """Check addresses that are never valid classifier targets."""
     for cand in _candidate_ips(ip):
+        if cand in _ALWAYS_BLOCKED_IPS:
+            return True
         if cand.is_unspecified or cand.is_multicast or cand.is_reserved or cand.is_link_local:
             return True
     return False
@@ -59,7 +76,7 @@ def _ip_blocked_when_private_closed(ip):
 
 
 def _validate_target(url):
-    """Resolve ONCE and validate. Return (parsed, hostname, port, pinned_ip).
+    """Resolve ONCE and validate. Return (parsed, hostname, port, pinned_ips).
 
     Raises ValueError when the endpoint is not allowed.
     """
@@ -93,7 +110,9 @@ def _validate_target(url):
         if not allow_private and _ip_blocked_when_private_closed(ip):
             raise ValueError("Accès aux adresses privées et locales désactivé")
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    return parsed, hostname, port, ips[0]
+    # Deduplicated validated IPs, order preserved; callers try each in turn.
+    pinned_ips = list(dict.fromkeys(ips))
+    return parsed, hostname, port, pinned_ips
 
 
 def is_safe_url(url: str) -> tuple[bool, str]:
@@ -114,61 +133,86 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
 
 
 class _PinnedHTTPConnection(http.client.HTTPConnection):
-    """HTTP connection pinned to a pre-validated IP (no second DNS lookup)."""
+    """HTTP connection pinned to pre-validated IPs (no second DNS lookup)."""
 
-    def __init__(self, host, port=None, pinned_ip=None, **kwargs):
+    def __init__(self, host, port=None, pinned_ip=None, pinned_ips=None, **kwargs):
         super().__init__(host, port, **kwargs)
-        self._pinned_ip = pinned_ip or host
+        if pinned_ips is not None:
+            self._pinned_ips = list(pinned_ips)
+        elif pinned_ip is not None:
+            self._pinned_ips = [pinned_ip]
+        else:
+            self._pinned_ips = [host]
 
     def connect(self):
-        self.sock = socket.create_connection(
-            (self._pinned_ip, self.port), self.timeout, self.source_address)
+        last_err = None
+        for ip in self._pinned_ips:
+            try:
+                self.sock = socket.create_connection(
+                    (ip, self.port), self.timeout, self.source_address)
+                return
+            except OSError as err:
+                last_err = err
+        raise last_err
 
 
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
-    """HTTPS connection pinned to a pre-validated IP, SNI kept on hostname."""
+    """HTTPS connection pinned to pre-validated IPs, SNI kept on hostname."""
 
-    def __init__(self, host, port=None, pinned_ip=None, **kwargs):
+    def __init__(self, host, port=None, pinned_ip=None, pinned_ips=None, **kwargs):
         super().__init__(host, port, **kwargs)
-        self._pinned_ip = pinned_ip or host
+        if pinned_ips is not None:
+            self._pinned_ips = list(pinned_ips)
+        elif pinned_ip is not None:
+            self._pinned_ips = [pinned_ip]
+        else:
+            self._pinned_ips = [host]
 
     def connect(self):
-        sock = socket.create_connection(
-            (self._pinned_ip, self.port), self.timeout, self.source_address)
-        context = self._context or ssl.create_default_context()
-        self.sock = context.wrap_socket(sock, server_hostname=self.host)
+        last_err = None
+        for ip in self._pinned_ips:
+            try:
+                sock = socket.create_connection(
+                    (ip, self.port), self.timeout, self.source_address)
+            except OSError as err:
+                last_err = err
+                continue
+            context = self._context or ssl.create_default_context()
+            self.sock = context.wrap_socket(sock, server_hostname=self.host)
+            return
+        raise last_err
 
 
 class _PinnedHTTPHandler(urllib.request.HTTPHandler):
-    """urllib handler routing HTTP through the validated IP."""
+    """urllib handler routing HTTP through the validated IPs."""
 
-    def __init__(self, pinned_ip, **kwargs):
+    def __init__(self, pinned_ips, **kwargs):
         super().__init__(**kwargs)
-        self._pinned_ip = pinned_ip
+        self._pinned_ips = [pinned_ips] if isinstance(pinned_ips, str) else list(pinned_ips)
 
     def http_open(self, req):
-        pinned_ip = self._pinned_ip
+        pinned_ips = self._pinned_ips
 
         class _Bound(_PinnedHTTPConnection):
             def __init__(self, host, port=None, **kw):
-                super().__init__(host, port, pinned_ip=pinned_ip, **kw)
+                super().__init__(host, port, pinned_ips=pinned_ips, **kw)
 
         return self.do_open(_Bound, req)
 
 
 class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
-    """urllib handler routing HTTPS through the validated IP."""
+    """urllib handler routing HTTPS through the validated IPs."""
 
-    def __init__(self, pinned_ip, **kwargs):
+    def __init__(self, pinned_ips, **kwargs):
         super().__init__(**kwargs)
-        self._pinned_ip = pinned_ip
+        self._pinned_ips = [pinned_ips] if isinstance(pinned_ips, str) else list(pinned_ips)
 
     def https_open(self, req):
-        pinned_ip = self._pinned_ip
+        pinned_ips = self._pinned_ips
 
         class _Bound(_PinnedHTTPSConnection):
             def __init__(self, host, port=None, **kw):
-                super().__init__(host, port, pinned_ip=pinned_ip, **kw)
+                super().__init__(host, port, pinned_ips=pinned_ips, **kw)
 
         return self.do_open(_Bound, req)
 
@@ -179,10 +223,10 @@ def _send_request(method, url, headers=None, data=None, timeout=DEFAULT_TIMEOUT)
     Returns (status, response_headers, body_bytes). A 3xx response raises
     urllib.error.HTTPError (never followed).
     """
-    _parsed, _hostname, _port, pinned_ip = _validate_target(url)
+    _parsed, _hostname, _port, pinned_ips = _validate_target(url)
     opener = urllib.request.build_opener(
-        _PinnedHTTPHandler(pinned_ip),
-        _PinnedHTTPSHandler(pinned_ip),
+        _PinnedHTTPHandler(pinned_ips),
+        _PinnedHTTPSHandler(pinned_ips),
         _NoRedirectHandler(),
         urllib.request.ProxyHandler({}),
     )

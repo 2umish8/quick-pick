@@ -18,3 +18,6 @@ services:
       - QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=0
       # Container listens on 0.0.0.0 so a token is required to start.
       - QUICK_PICK_TOKEN=${QUICK_PICK_TOKEN:?Set QUICK_PICK_TOKEN in .env or the environment}
+    # Linux: uncomment to reach a host-side LLM (Ollama) via host.docker.internal
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"

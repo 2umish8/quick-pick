@@ -11,6 +11,7 @@
 
 ### Mise à niveau
 1. Si vous utilisiez un LLM local (Ollama) : redémarrez avec `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. En Docker, utilisez `host.docker.internal` comme hôte d'endpoint.
-2. En Docker : définissez `QUICK_PICK_TOKEN` dans votre `.env` ou votre environnement avant `docker compose up -d`, puis ouvrez `http://localhost:8791/?token=<votre-jeton>` (le jeton est enregistré dans le navigateur).
+2. En Docker : définissez `QUICK_PICK_TOKEN` dans votre `.env` ou votre environnement avant `docker compose up -d`, puis ouvrez `http://localhost:8791/#token=<votre-jeton>` (le jeton est conservé pour la session de l'onglet uniquement, jamais dans la chaîne de requête ; ajoutez `&remember=1` pour le persister dans le `localStorage` sur une machine de confiance, ou saisissez-le à l'invite en cas de `401 unauthorized`).
 3. Si vous exposiez le serveur sur le réseau local (`QUICK_PICK_HOST=0.0.0.0` hors Docker) : définissez également `QUICK_PICK_TOKEN`, sinon le serveur refusera de démarrer.
 4. Aucune action requise pour un usage local par défaut (`127.0.0.1` sans LLM local).
+- Correctifs round 3 : adresses de métadonnées cloud toujours bloquées (`100.100.100.200`, `fd00:ec2::254`, même avec `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`) ; jeton passé par le fragment d'URL et conservé en `sessionStorage` par défaut (`&remember=1` pour le `localStorage`) avec invite en cas de `401` ; le proxy essaie chaque IP validée à tour de rôle ; aide Docker `extra_hosts` pour Ollama hôte et note DNS « fake-IP » (`198.18.0.0/15`).
