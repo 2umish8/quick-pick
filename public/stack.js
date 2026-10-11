@@ -1,4 +1,6 @@
 // Module Stack : Rendu de la pile réelle carrée & physique de drag/swipe
+import { escapeHtml } from "./escape.js";
+
 const SWIPE_THRESHOLD = 85;
 
 function getCardOrganicTransform(index, id) {
@@ -152,9 +154,4 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
   };
   cardEl.addEventListener("pointerup", finishMouse);
   cardEl.addEventListener("pointercancel", finishMouse);
-}
-
-function escapeHtml(str) {
-  if (!str) return "";
-  return String(str).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 }

@@ -1,5 +1,6 @@
 // Module Principal Quick-Pick (SOLID SRP)
 import { fetchDecks, fetchDeckState, postDecision, postUndo, postSkip, fetchSummary } from "./api.js";
+import { escapeHtml } from "./escape.js";
 import { renderStack, attachClassifierSuggestion } from "./stack.js";
 import { initDrawer, openDrawer, updateDrawerState } from "./deck-drawer.js";
 import { initSettingsModal, fetchItemPrediction } from "./classifier.js";
@@ -226,11 +227,6 @@ function initKeyboard() {
       onCardDecide(matchedByKey.id);
     }
   });
-}
-
-function escapeHtml(str) {
-  if (!str) return "";
-  return String(str).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 }
 
 function getInitialDeckId() {

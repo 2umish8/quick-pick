@@ -1,4 +1,6 @@
 // Module Drawer : consultation des cartes décidées et à décider
+import { escapeHtml } from "./escape.js";
+
 let currentTab = "pending"; // "pending" | "decided"
 let activeState = null;
 let undoCallback = null;
@@ -94,9 +96,4 @@ function renderDrawerContent() {
       });
     });
   }
-}
-
-function escapeHtml(str) {
-  if (!str) return "";
-  return String(str).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 }

@@ -213,6 +213,8 @@ ruff check .                                        # optionnel : pip install -e
 
 Les mêmes vérifications tournent dans la CI à chaque pull request.
 
+> Les checks front-end (`tests/js/*.test.mjs`, sans dépendance et sans DOM) sont lancés automatiquement via `node --test` si `node` est installé, sinon ils sont ignorés.
+
 ---
 
 ## 📄 Licence
