@@ -226,9 +226,13 @@ class QuickPickHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
             if length > MAX_BODY_SIZE:
                 return None, {"error": "payload_too_large", "detail": f"Max {MAX_BODY_SIZE} octets"}
-            return json.loads((self.rfile.read(length) if length else b"{}").decode("utf-8") or "{}"), None
+            payload = json.loads((self.rfile.read(length) if length else b"{}").decode("utf-8") or "{}")
         except (ValueError, UnicodeDecodeError) as err:
             return None, {"error": "invalid_json", "detail": str(err)}
+        # A JSON array/scalar/string is syntactically valid but unusable: callers read payload as an object.
+        if not isinstance(payload, dict):
+            return None, {"error": "invalid_json", "detail": "Le corps JSON doit être un objet"}
+        return payload, None
 
     def do_HEAD(self): self.do_GET(head_only=True)
 

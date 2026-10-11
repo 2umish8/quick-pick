@@ -1,5 +1,14 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from deck_store import resolve_item_actions
+
+
+def parse_decision_timestamp(value):
+    """Parse a decision timestamp; naive values are assumed to be UTC, junk is dropped."""
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
 def compute_deck_summary(deck):
@@ -32,14 +41,10 @@ def compute_deck_summary(deck):
         })
 
     elapsed_seconds = 0
-    if len(timestamps) >= 2:
-        try:
-            t_first = datetime.fromisoformat(min(timestamps))
-            t_last = datetime.fromisoformat(max(timestamps))
-            elapsed_seconds = max(0, int((t_last - t_first).total_seconds()))
-        except ValueError:
-            elapsed_seconds = 0
-    elif len(timestamps) == 1:
+    stamps = [stamp for stamp in map(parse_decision_timestamp, timestamps) if stamp is not None]
+    if len(stamps) >= 2:
+        elapsed_seconds = max(0, int((max(stamps) - min(stamps)).total_seconds()))
+    elif len(stamps) == 1:
         elapsed_seconds = 1
 
     return {

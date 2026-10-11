@@ -189,6 +189,8 @@ Chaque deck est un document JSON autonome :
 }
 ```
 
+> **Validation à la lecture** : au chargement, chaque deck est contrôlé — `items` doit être un tableau JSON et chaque item doit porter un `id` et un `title` non vides. Un deck non conforme renvoie une erreur `404` explicite ; le fichier n'est jamais réécrit ni corrigé automatiquement.
+
 ---
 
 ## 🔒 Sécurité & Déploiement en Production
