@@ -1,4 +1,6 @@
-// Module Classifier : Configuration & Suggestions IA Universelles (OpenAI, Ollama, Groq, Custom)
+// Classifier module: universal AI configuration & suggestions (OpenAI, Ollama, Groq, Custom)
+import { authFetch } from "./api.js";
+
 const STORAGE_KEY = "quickpick_classifier_cfg";
 
 export function getClassifierConfig() {
@@ -29,9 +31,9 @@ export function saveClassifierConfig(cfg) {
 }
 
 export async function testClassifierConnection(endpoint, apiKey, provider, model) {
-  const resp = await fetch("/api/classifier/test", {
+  const resp = await authFetch("/api/classifier/test", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" }, // authFetch adds the token
     body: JSON.stringify({
       endpoint: (endpoint || "").trim(),
       api_key: (apiKey || "").trim(),
@@ -57,9 +59,9 @@ export async function fetchItemPrediction(item, actions) {
       model: cfg.model,
     };
 
-    const resp = await fetch("/api/classifier/predict", {
+    const resp = await authFetch("/api/classifier/predict", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" }, // authFetch adds the token
       body: JSON.stringify({
         endpoint: cfg.endpoint,
         api_key: cfg.apiKey,
@@ -110,8 +112,8 @@ export function initSettingsModal() {
     }
     if (endpointInput) {
       endpointInput.placeholder = isCustom
-        ? "http://127.0.0.1:8000/classify"
-        : "https://api.openai.com/v1 ou http://localhost:11434/v1";
+        ? "https://scoring.example.com/classify"
+        : "https://api.openai.com/v1";
     }
   }
 

@@ -5,11 +5,19 @@ services:
     container_name: quick-pick
     restart: unless-stopped
     ports:
-      - "8791:8791"
+      - "127.0.0.1:8791:8791"
     volumes:
       - ./data/decks:/app/data/decks
     environment:
       - QUICK_PICK_HOST=0.0.0.0
       - QUICK_PICK_PORT=8791
       - QUICK_PICK_DATA_DIR=/app/data/decks
-      - QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1
+      # Private classifier endpoints blocked by default (0). Opt in for
+      # Ollama/local LLM with QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1 (and use
+      # host.docker.internal as endpoint host from inside Docker).
+      - QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=0
+      # Container listens on 0.0.0.0 so a token is required to start.
+      - QUICK_PICK_TOKEN=${QUICK_PICK_TOKEN:?Set QUICK_PICK_TOKEN in .env or the environment}
+    # Linux: uncomment to reach a host-side LLM (Ollama) via host.docker.internal
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"

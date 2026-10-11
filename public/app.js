@@ -123,9 +123,9 @@ async function triggerUndo(itemId = null) {
 
 function renderDock(actions) {
   dom.kineticDock.innerHTML = actions.map(act => `
-    <button class="action-key-button ${act.color || 'neutral'}" data-action-id="${act.id}">
+    <button class="action-key-button ${escapeHtml(act.color || 'neutral')}" data-action-id="${escapeHtml(act.id)}">
       <span>${escapeHtml(act.label)}</span>
-      ${act.key ? `<kbd class="keycap-badge">${act.key.toUpperCase()}</kbd>` : ""}
+      ${act.key ? `<kbd class="keycap-badge">${escapeHtml(String(act.key).toUpperCase())}</kbd>` : ""}
     </button>
   `).join("");
   dom.kineticDock.querySelectorAll(".action-key-button").forEach(btn => {
@@ -138,7 +138,7 @@ async function showSummary() {
   const summary = await fetchSummary(state.activeDeckId);
   const breakdownHtml = Object.entries(summary.actions_breakdown || {}).map(([actId, count]) => `
     <div class="summary-stat-card">
-      <span class="summary-stat-val">${count}</span>
+      <span class="summary-stat-val">${escapeHtml(String(count))}</span>
       <span class="summary-stat-label">${escapeHtml(actId)}</span>
     </div>
   `).join("");
@@ -235,7 +235,11 @@ function escapeHtml(str) {
 
 function getInitialDeckId() {
   const hash = window.location.hash.replace(/^#/, "").trim();
-  if (hash) return decodeURIComponent(hash);
+  if (hash) {
+    // api.js strips token=/remember= parts at load; filter defensively here too.
+    const kept = hash.split("&").filter(p => p && !p.startsWith("token=") && p !== "remember=1");
+    if (kept.length) return decodeURIComponent(kept[0]);
+  }
   const params = new URLSearchParams(window.location.search);
   const deckParam = params.get("deck");
   if (deckParam) return deckParam.trim();
