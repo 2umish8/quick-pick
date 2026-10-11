@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
+const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "public");
 const read = (name) => readFileSync(join(PUBLIC_DIR, name), "utf8");
 
 /* ------------------------------------------------------------------ *
@@ -64,7 +64,7 @@ async function loadDrawerModule() {
     drawer,
     panel,
     fakeDocument,
-    mod: await import(`../public/deck-drawer.js?case=${Math.random()}`),
+    mod: await import(`../../public/deck-drawer.js?case=${Math.random()}`),
   };
 }
 
