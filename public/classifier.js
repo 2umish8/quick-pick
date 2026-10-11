@@ -1,5 +1,5 @@
 // Classifier module: universal AI configuration & suggestions (OpenAI, Ollama, Groq, Custom)
-import { authFetch, authHeaders } from "./api.js";
+import { authFetch } from "./api.js";
 
 const STORAGE_KEY = "quickpick_classifier_cfg";
 
@@ -33,7 +33,7 @@ export function saveClassifierConfig(cfg) {
 export async function testClassifierConnection(endpoint, apiKey, provider, model) {
   const resp = await authFetch("/api/classifier/test", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" }, // authFetch adds the token
     body: JSON.stringify({
       endpoint: (endpoint || "").trim(),
       api_key: (apiKey || "").trim(),
@@ -61,7 +61,7 @@ export async function fetchItemPrediction(item, actions) {
 
     const resp = await authFetch("/api/classifier/predict", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
+      headers: { "Content-Type": "application/json" }, // authFetch adds the token
       body: JSON.stringify({
         endpoint: cfg.endpoint,
         api_key: cfg.apiKey,

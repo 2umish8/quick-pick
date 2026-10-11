@@ -39,7 +39,7 @@ def _allow_private_endpoints():
 def _classifier_allowed_hosts():
     """Return the optional allowlist of endpoint hostnames (lowercase)."""
     raw = os.environ.get("QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS", "")
-    return {h.strip().lower() for h in raw.split(",") if h.strip()}
+    return {h.strip().lower().rstrip(".") for h in raw.split(",") if h.strip().rstrip(".")}
 
 
 def _candidate_ips(ip):
@@ -86,10 +86,12 @@ def _validate_target(url):
     hostname = parsed.hostname
     if not hostname:
         raise ValueError("Nom d'hôte manquant dans l'URL")
+    # Normalize case and the trailing root dot ("metadata.goog." == "metadata.goog").
+    host_norm = hostname.lower().rstrip(".")
     allowed = _classifier_allowed_hosts()
-    if allowed and hostname.lower() not in allowed:
+    if allowed and host_norm not in allowed:
         raise ValueError("Hôte de l'endpoint absent de la liste autorisée")
-    if hostname.lower() in _CLOUD_METADATA_HOSTS:
+    if host_norm in _CLOUD_METADATA_HOSTS:
         raise ValueError("Accès interdit aux services de métadonnées cloud")
     try:
         addr_info = socket.getaddrinfo(hostname, None)

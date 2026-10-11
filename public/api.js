@@ -32,17 +32,26 @@ export function clearToken() {
 }
 
 // Capture #token=... / #<deckId>&token=...[&remember=1] once, persist it, strip it from the hash.
+// The fragment is always rewritten (finally), even if the token is malformed.
 function captureTokenFromFragment() {
+  let raw = "";
   try {
-    const raw = location.hash.replace(/^#/, "");
-    if (!raw || !raw.includes("token=")) return;
-    const parts = raw.split("&");
+    raw = (location.hash || "").replace(/^#/, "");
+  } catch {
+    return;
+  }
+  if (!raw || !raw.includes("token=")) return;
+  const kept = [];
+  try {
     let token = null;
     let remember = false;
-    const kept = [];
-    for (const part of parts) {
+    for (const part of raw.split("&")) {
       if (part.startsWith("token=")) {
-        token = decodeURIComponent(part.slice("token=".length));
+        try {
+          token = decodeURIComponent(part.slice("token=".length));
+        } catch {
+          token = null; // Malformed percent-encoding: drop the token.
+        }
       } else if (part === "remember=1") {
         remember = true;
       } else if (part) {
@@ -50,12 +59,14 @@ function captureTokenFromFragment() {
       }
     }
     if (token) setToken(token, remember);
-    // Preserve path+query without ever parsing the query string for tokens.
-    const base = location.href.split("#")[0];
-    const nextUrl = kept.length ? `${base}#${kept.join("&")}` : base;
-    history.replaceState(null, "", nextUrl);
-  } catch {
-    // Storage or history unavailable (private mode): stay unauthenticated.
+  } finally {
+    try {
+      // Preserve path+query without ever parsing the query string for tokens.
+      const base = location.href.split("#")[0];
+      history.replaceState(null, "", kept.length ? `${base}#${kept.join("&")}` : base);
+    } catch {
+      // History unavailable: nothing more we can do.
+    }
   }
 }
 
@@ -92,7 +103,8 @@ export function authHeaders() {
 export async function request(endpoint, options = {}) {
   const doFetch = (extraHeaders = {}) => fetch(endpoint, {
     ...options,
-    headers: { "Content-Type": "application/json", ...authHeaders(), ...(options.headers || {}), ...extraHeaders },
+    // authHeaders() last so a token entered at the 401 prompt wins on retry.
+    headers: { "Content-Type": "application/json", ...(options.headers || {}), ...extraHeaders, ...authHeaders() },
   });
   let response = await doFetch();
   let data = await readErrorBody(response);
@@ -112,7 +124,7 @@ export async function request(endpoint, options = {}) {
 export async function authFetch(url, options = {}) {
   let response = await fetch(url, {
     ...options,
-    headers: { "Content-Type": "application/json", ...authHeaders(), ...(options.headers || {}) },
+    headers: { "Content-Type": "application/json", ...(options.headers || {}), ...authHeaders() },
   });
   const contentType = response.headers.get("content-type") || "";
   if (response.status === 401) {
@@ -127,7 +139,7 @@ export async function authFetch(url, options = {}) {
       if (!token) return response;
       response = await fetch(url, {
         ...options,
-        headers: { "Content-Type": "application/json", ...authHeaders(), ...(options.headers || {}) },
+        headers: { "Content-Type": "application/json", ...(options.headers || {}), ...authHeaders() },
       });
     }
   }

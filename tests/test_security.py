@@ -528,3 +528,25 @@ class FrontendImportGuardTests(unittest.TestCase):
             if helper + "(" in src:
                 self.assertIn(helper, imported)
 
+
+class TrailingDotHostnameTests(unittest.TestCase):
+    """Metadata hostnames with a trailing root dot must be rejected by name."""
+
+    def test_trailing_dot_metadata_hosts_rejected_without_dns(self):
+        with mock.patch.dict(os.environ, {"QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS": "1"}), \
+             mock.patch("socket.getaddrinfo") as gai:
+            for host in ("metadata.goog.", "metadata.", "metadata.google.internal.", "METADATA.GOOG."):
+                ok, msg = classifier_proxy.is_safe_url(f"http://{host}/computeMetadata/v1/")
+                self.assertFalse(ok, host)
+                self.assertIn("métadonnées", msg)
+            gai.assert_not_called()
+
+    def test_allowlist_ignores_trailing_dot(self):
+        env = {"QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS": "api.openai.com."}
+        public = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]
+        with mock.patch.dict(os.environ, env), \
+             mock.patch("socket.getaddrinfo", return_value=public):
+            self.assertTrue(classifier_proxy.is_safe_url("https://api.openai.com./v1")[0])
+            self.assertTrue(classifier_proxy.is_safe_url("https://api.openai.com/v1")[0])
+            self.assertFalse(classifier_proxy.is_safe_url("https://evil.example/v1")[0])
+
