@@ -1,8 +1,41 @@
-// Module API REST pour quick-pick
+// REST API module for quick-pick
+const TOKEN_KEY = "quickPickToken";
+
+export function getToken() {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+// Capture ?token=... once, persist it, then strip it from the URL.
+function captureTokenFromURL() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const token = params.get("token");
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+      params.delete("token");
+      const query = params.toString();
+      history.replaceState(null, "", location.pathname + (query ? `?${query}` : "") + location.hash);
+    }
+  } catch {
+    // Storage or history unavailable (private mode): stay unauthenticated.
+  }
+}
+
+captureTokenFromURL();
+
+export function authHeaders() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export async function request(endpoint, options = {}) {
   const response = await fetch(endpoint, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: { "Content-Type": "application/json", ...authHeaders(), ...(options.headers || {}) },
   });
   let data;
   const contentType = response.headers.get("content-type") || "";
