@@ -143,6 +143,33 @@ Quick-Pick résout le problème du **« mur de texte »** dans les chats avec le
 
 ---
 
+## 🆕 Créer un Deck depuis l'Interface Web
+
+Sans terminal : sur l'écran d'accueil, cliquez sur **Créer un deck**, donnez un titre, choisissez un modèle de décision (`triage`, `binary` ou `priority`) et collez vos éléments **une ligne par carte**. Le deck est créé et le tri démarre immédiatement. Depuis le récapitulatif, le bouton **Copier en Markdown** exporte vos décisions avec leurs libellés.
+
+L'API équivalente (utile pour les agents) :
+
+```bash
+curl -X POST http://localhost:8791/api/decks \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "title": "Tri du backlog Q4",
+        "template": "triage",
+        "items": ["Migrer la base vers Postgres", "Supprimer le module legacy"]
+      }'
+```
+
+| Champ | Requis | Règle de validation |
+|---|---|---|
+| `title` | oui | non vide, 120 caractères max |
+| `items` | oui | tableau de lignes non vides, 500 caractères par carte, 200 cartes max |
+| `template` | non (`triage`) | `triage`, `binary` ou `priority` |
+| `id` | non | slug généré depuis le titre ; sinon `^[a-zA-Z0-9_-]{1,128}$` |
+
+Réponses : `201` avec l'état du deck, `400` sur une entrée invalide, `409` si l'identifiant demandé existe déjà (un deck n'est **jamais** écrasé). Pour une description, une catégorie ou des actions sur-mesure, passez par `deck_cli create`.
+
+---
+
 ## 📋 Utilisation en Ligne de Commande (`deck_cli.py`)
 
 Les scripts d'automatisation et agents d'IA peuvent piloter les decks directement en ligne de commande :

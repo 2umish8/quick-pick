@@ -58,6 +58,20 @@ python3 deck_cli.py create \
   --items-file items.json
 ```
 
+### Méthode alternative : API HTTP `POST /api/decks`
+
+Même chose sans fichier JSON, à partir d'une simple liste de lignes (une ligne = une carte) :
+
+```bash
+curl -X POST http://localhost:8791/api/decks \
+  -H 'Content-Type: application/json' \
+  -d '{"title": "Mon-arbitrage", "template": "triage", "items": ["Élément 1", "Élément 2"]}'
+```
+
+`items` est un tableau de lignes non vides (200 cartes max, 500 caractères par carte), `template` vaut `triage` (défaut), `binary` ou `priority`. Sans champ `id`, l'identifiant est dérivé du titre ; avec un `id` explicite, la création échoue en `409` si le deck existe déjà (jamais d'écrasement). La réponse `201` contient l'état du deck, prêt à être joué.
+
+L'interface web expose exactement le même parcours (bouton **Créer un deck** sur l'écran d'accueil).
+
 ### Convention canonique des options par défaut
 
 Pour garantir la mémoire musculaire, tout deck standard suit la polarité et les directions canoniques :
