@@ -56,7 +56,7 @@ export QUICK_PICK_UID=$(id -u) QUICK_PICK_GID=$(id -g)
 docker compose up -d
 ```
 
-Vérification rapide : `docker compose ps` doit afficher `(healthy)`, `curl http://localhost:8791/api/health` doit répondre `{"ok": true, ...}`.
+Vérification rapide : `docker compose ps` doit afficher `(healthy)`, `curl -H "X-Quick-Pick-Token: $QUICK_PICK_TOKEN" http://localhost:8791/api/health` doit répondre `{"ok": true, ...}`.
 
 ---
 

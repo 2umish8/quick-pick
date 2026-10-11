@@ -33,6 +33,6 @@ EXPOSE 8791
 VOLUME ["/app/data/decks"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD python3 -c "import os,urllib.request;urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('QUICK_PICK_PORT', '8791') + '/api/health', timeout=4)"
+    CMD python3 -c "import os,urllib.request as u;u.urlopen(u.Request('http://127.0.0.1:' + os.environ.get('QUICK_PICK_PORT', '8791') + '/api/health', headers={'X-Quick-Pick-Token': os.environ.get('QUICK_PICK_TOKEN', '')}), timeout=4)"
 
 CMD ["python3", "server.py"]
