@@ -71,11 +71,11 @@ async function loadDecks() {
   }
   hideErrorBanner();
   dom.deckList.innerHTML = (data.decks || []).map(deck => `
-    <div class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}">
+    <button type="button" class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}">
       <div class="deck-item-category">${escapeHtml(deck.category || "PROJET")}</div>
       <div class="deck-item-title">${escapeHtml(deck.title)}</div>
       <div class="deck-item-desc">${escapeHtml(deck.description || "")}</div>
-    </div>
+    </button>
   `).join("");
   dom.deckList.querySelectorAll(".deck-item-card").forEach(el => {
     el.addEventListener("click", () => startDeck(el.dataset.deckId));
@@ -149,16 +149,33 @@ async function triggerUndo(itemId = null) {
   }
 }
 
+const DIRECTION_SHORTCUTS = { east: "ArrowRight", west: "ArrowLeft", north: "ArrowUp", south: "ArrowDown" };
+
 function renderDock(actions) {
+  // Keep keyboard focus on an equivalent button after the dock is re-rendered.
+  const focusedBtn = document.activeElement?.closest?.(".action-key-button");
+  const focusedIndex = focusedBtn
+    ? actions.findIndex(a => String(a.id) === focusedBtn.dataset.actionId)
+    : -1;
   dom.kineticDock.innerHTML = actions.map(act => `
-    <button class="action-key-button ${escapeHtml(act.color || 'neutral')}" data-action-id="${escapeHtml(act.id)}">
+    <button class="action-key-button ${escapeHtml(act.color || 'neutral')}" data-action-id="${escapeHtml(act.id)}"${ariaKeyShortcuts(act)}>
       <span>${escapeHtml(act.label)}</span>
       ${act.key ? `<kbd class="keycap-badge">${escapeHtml(String(act.key).toUpperCase())}</kbd>` : ""}
     </button>
   `).join("");
-  dom.kineticDock.querySelectorAll(".action-key-button").forEach(btn => {
+  const buttons = dom.kineticDock.querySelectorAll(".action-key-button");
+  buttons.forEach(btn => {
     btn.addEventListener("click", () => onCardDecide(btn.dataset.actionId));
   });
+  if (focusedIndex >= 0 && buttons.length) {
+    buttons[Math.min(focusedIndex, buttons.length - 1)].focus();
+  }
+}
+
+// Screen readers get the shortcut keys attached to the button instead of losing the visible label.
+function ariaKeyShortcuts(action) {
+  const keys = [action.key && String(action.key).toUpperCase(), DIRECTION_SHORTCUTS[action.direction]].filter(Boolean);
+  return keys.length ? ` aria-keyshortcuts="${escapeHtml(keys.join(" "))}"` : "";
 }
 
 async function showSummary() {

@@ -240,7 +240,7 @@ Quick-Pick est conçu comme une application mono-utilisateur ou d'équipe intern
 ```bash
 PYTHONPATH=. python3 -m unittest discover -s tests
 ruff check .                                        # optionnel : pip install -e ".[dev]"
-node --test tests/js/*.test.mjs                      # front-end (classifieur, XSS, timeout)
+node --test tests/js/*.test.mjs                      # front-end (classifieur, XSS, timeout, mobile & a11y)
 ```
 
 Les mêmes vérifications tournent dans la CI à chaque pull request.

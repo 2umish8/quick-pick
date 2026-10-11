@@ -4,6 +4,7 @@ import { escapeHtml } from "./escape.js";
 let currentTab = "pending"; // "pending" | "decided"
 let activeState = null;
 let undoCallback = null;
+let lastFocusedEl = null;
 
 export function initDrawer(callbacks = {}) {
   undoCallback = callbacks.onUndoItem || null;
@@ -26,13 +27,22 @@ export function initDrawer(callbacks = {}) {
 
 export function openDrawer() {
   const drawer = document.getElementById("deck-drawer");
-  drawer?.classList.add("open");
+  if (!drawer || drawer.classList.contains("open")) return;
+  lastFocusedEl = document.activeElement;
+  drawer.classList.add("open");
+  drawer.setAttribute("aria-hidden", "false");
   renderDrawerContent();
+  // Focus on the panel itself so screen readers announce the dialog role + label.
+  drawer.querySelector(".drawer-panel")?.focus();
 }
 
 export function closeDrawer() {
   const drawer = document.getElementById("deck-drawer");
-  drawer?.classList.remove("open");
+  if (!drawer || !drawer.classList.contains("open")) return;
+  drawer.classList.remove("open");
+  drawer.setAttribute("aria-hidden", "true");
+  if (lastFocusedEl?.isConnected) lastFocusedEl.focus();
+  lastFocusedEl = null;
 }
 
 export function updateDrawerState(state) {

@@ -19,10 +19,10 @@
 
 <!-- Header -->
 <header class="app-header">
-  <div class="logo-zone" id="logo-zone" title="Retour aux decks">
+  <button type="button" class="logo-zone" id="logo-zone" title="Retour aux decks" aria-label="Retour aux decks">
     <span class="logo-title">⚡ Quick-Pick</span>
     <span class="deck-pill" id="header-deck-pill" hidden></span>
-  </div>
+  </button>
   <div class="header-actions-zone">
     <button class="header-settings-btn" id="header-settings-btn" title="Paramètres du classifieur" aria-label="Paramètres">⚙️</button>
     <button class="header-undo-btn" id="header-undo-btn" hidden title="Annuler la dernière décision (Ctrl+Z)" aria-label="Annuler la dernière décision">↩ Annuler</button>
@@ -55,7 +55,7 @@
     <div class="comment-bar" id="comment-bar">
       <input type="text" id="decision-comment-input" class="comment-input" placeholder="Note ou critère optionnel..." autocomplete="off" />
     </div>
-    <div class="kinetic-dock" id="kinetic-dock"></div>
+    <div class="kinetic-dock" id="kinetic-dock" role="group" aria-label="Décider pour cette carte"></div>
   </section>
 
   <!-- Vue Summary -->
@@ -67,7 +67,7 @@
 <!-- Panneau / Drawer : Décidés & À décider -->
 <div id="deck-drawer" class="drawer-container" aria-hidden="true">
   <div id="drawer-backdrop" class="drawer-backdrop"></div>
-  <div class="drawer-panel">
+  <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="Décisions : cartes tranchées et à décider" tabindex="-1">
     <div class="drawer-header">
       <div class="drawer-tabs">
         <button class="drawer-tab-btn active" id="tab-btn-pending">À décider</button>

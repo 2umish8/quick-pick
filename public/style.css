@@ -60,6 +60,9 @@ header.app-header {
   align-items: center;
   gap: 10px;
   cursor: pointer;
+  /* MOW-188: real <button> now, without the native chrome. */
+  background: none; border: 0; padding: 0;
+  font: inherit; color: inherit; text-align: left;
 }
 .logo-title {
   font-size: 17px;
@@ -161,6 +164,9 @@ main.stage-shell {
   border-radius: var(--radius-card);
   padding: 20px;
   cursor: pointer;
+  /* MOW-188: real <button> now, without the native chrome. */
+  display: block; width: 100%; text-align: left;
+  font: inherit; color: inherit;
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
 .deck-item-card:hover { transform: translateY(-2px); border-color: var(--border-focus); }
@@ -309,7 +315,6 @@ main.stage-shell {
   color: var(--text);
   font-size: 13px;
   padding: 0 12px;
-  outline: none;
 }
 .settings-input:focus { border-color: var(--border-focus); }
 .toggle-field { margin-top: 4px; }
@@ -360,4 +365,10 @@ main.stage-shell {
   background: rgba(56, 189, 248, 0.15);
   border: 1px solid rgba(56, 189, 248, 0.35);
   color: #38BDF8;
+}
+
+/* MOW-188: focus ring everywhere; declared last so a local outline reset cannot shadow it. */
+:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
 }
