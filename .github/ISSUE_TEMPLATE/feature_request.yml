@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a change to Quick-Pick
+title: "[feat] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One request per issue. The maintainer triages; see MAINTAINERS.md.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What cannot be done today, and who hits it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Smallest change that solves the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: No new runtime dependency (standard library server, vanilla ES modules front-end)
+          required: false
+        - label: Backwards compatible with self-hosted installs, or the incompatibility is documented
+          required: false
+        - label: Comes with tests in tests/
+          required: false

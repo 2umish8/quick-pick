@@ -1,0 +1,54 @@
+name: Bug report
+description: Something does not work as documented
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a security problem, do not use this form: see SECURITY.md (private reporting).
+
+  - type: input
+    id: quick-pick-version
+    attributes:
+      label: Quick-Pick version or commit
+      placeholder: v2.0.0 or 1a2b3c4
+    validations:
+      required: true
+
+  - type: dropdown
+    id: run-mode
+    attributes:
+      label: How do you run Quick-Pick?
+      options:
+        - python3 server.py
+        - docker compose
+        - pip install
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happens
+      description: Expected result, then what actually happens.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the server with QUICK_PICK_DATA_DIR=...
+        2. Open the deck "..."
+        3. Click "..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server output or browser console errors
+      render: text
