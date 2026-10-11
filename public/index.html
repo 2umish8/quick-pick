@@ -34,6 +34,12 @@
 
 <!-- Scène Principale -->
 <main class="stage-shell">
+  <!-- Bannière d'erreur réseau : annoncée aux lecteurs d'écran, retry manuel -->
+  <div class="error-banner" id="error-banner" role="alert" hidden>
+    <span id="error-banner-text"></span>
+    <button type="button" class="error-banner-retry" id="error-banner-retry">Réessayer</button>
+  </div>
+
   <!-- Vue Decks -->
   <section id="view-decks">
     <div class="deck-selector-head">

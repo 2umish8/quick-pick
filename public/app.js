@@ -19,7 +19,25 @@ const dom = {
   commentInput: document.getElementById("decision-comment-input"),
   kineticDock: document.getElementById("kinetic-dock"),
   summaryContent: document.getElementById("summary-content"),
+  errorBanner: document.getElementById("error-banner"),
+  errorBannerText: document.getElementById("error-banner-text"),
+  errorBannerRetry: document.getElementById("error-banner-retry"),
 };
+
+function showErrorBanner(message, onRetry) {
+  if (!dom.errorBanner) return;
+  dom.errorBannerText.textContent = message;
+  dom.errorBannerRetry.onclick = () => {
+    hideErrorBanner();
+    onRetry?.();
+  };
+  dom.errorBanner.hidden = false;
+}
+
+function hideErrorBanner() {
+  if (!dom.errorBanner) return;
+  dom.errorBanner.hidden = true;
+}
 
 function switchView(view) {
   state.currentView = view;
@@ -42,7 +60,16 @@ async function loadDecks() {
   }
   state.activeDeckId = null;
   state.deckData = null;
-  const data = await fetchDecks();
+  let data;
+  try {
+    data = await fetchDecks();
+  } catch (err) {
+    dom.deckList.innerHTML = "";
+    showErrorBanner(`Impossible de charger les sujets : ${err.message}`, loadDecks);
+    switchView("decks");
+    return;
+  }
+  hideErrorBanner();
   dom.deckList.innerHTML = (data.decks || []).map(deck => `
     <div class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}">
       <div class="deck-item-category">${escapeHtml(deck.category || "PROJET")}</div>
