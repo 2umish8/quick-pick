@@ -1,0 +1,15 @@
+services:
+  quick-pick:
+    build: .
+    image: quick-pick:latest
+    container_name: quick-pick
+    restart: unless-stopped
+    ports:
+      - "8791:8791"
+    volumes:
+      - ./data/decks:/app/data/decks
+    environment:
+      - QUICK_PICK_HOST=0.0.0.0
+      - QUICK_PICK_PORT=8791
+      - QUICK_PICK_DATA_DIR=/app/data/decks
+      - QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1

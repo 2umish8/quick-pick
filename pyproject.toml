@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quick-pick"
+version = "2.0.0"
+description = "Fast, distraction-free swipe and decision cards interface for mobile & desktop."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Quick-Pick Contributors" }
+]
+keywords = ["triage", "decision", "swipe", "productivity", "self-hosted", "llm", "byok"]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+quick-pick = "server:main"
+quick-pick-cli = "deck_cli:main"

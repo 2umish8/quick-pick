@@ -1,0 +1,176 @@
+# ⚡ Quick-Pick
+
+> Interface de décision et tri rapide 1 carte à la fois (mobile & desktop).  
+> Tranchez vos backlogs, relectures de code, idées ou audits sans distraction, avec swipe physique ou touches clavier, et assistance IA optionnelle (BYOK).
+
+---
+
+## ✨ Points Forts
+
+* **Zéro Dépendance** : 100% Python standard library (`server.py`). Aucun `pip install`, aucun bundler, démarre instantanément.
+* **Mobile-First & Clavier Desktop** : Swipe tactile physique fluide (`passive: false`) sur smartphone, flèches directionnelles et touches dédiées (`a`/`d`/`w`) sur desktop.
+* **Anti-Fork & BYOK Intégré** : Support natif universel des APIs OpenAI-compatibles (OpenAI `gpt-4o-mini`, Ollama local `llama3.2`, Groq, OpenRouter) et des webhooks de scoring custom.
+* **Persistance Simple & Propre** : Decks stockés en fichiers JSON lisibles et manipulables par scripts ou agents IA (`deck_cli.py`).
+* **Ergonomie Sans Stress** : Pas de compteurs anxiogènes pendant le tri, historique de décision consultable à tout moment, champ note contextuel et annulation complète (`Ctrl+Z`).
+
+---
+
+## 🚀 Démarrage Rapide
+
+### Option A : En local (5 secondes, zéro dépendance)
+
+```bash
+git clone https://github.com/2umish8/quick-pick.git
+cd quick-pick
+python3 server.py
+```
+👉 Ouvrez votre navigateur sur **`http://localhost:8791`**.
+
+### Option B : Avec Docker Compose (Recommandé en Self-Host)
+
+```bash
+docker compose up -d
+```
+👉 Le service est immédiatement opérationnel sur le port `8791` avec persistance des données dans `./data/decks`.
+
+---
+
+## 🛠️ Variables d'Environnement
+
+| Variable | Défaut | Description |
+|---|---|---|
+| `QUICK_PICK_HOST` | `127.0.0.1` (`0.0.0.0` dans Docker) | Adresse IP d'écoute du serveur |
+| `QUICK_PICK_PORT` | `8791` | Port d'écoute HTTP |
+| `QUICK_PICK_DATA_DIR` | `./data/decks` | Dossier de stockage des fichiers JSON de decks |
+| `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS` | `1` | Autoriser le proxy IA à requêter des endpoints locaux (ex: Ollama sur `127.0.0.1:11434`) |
+
+---
+
+## 🤖 Assistance IA & BYOK (Bring Your Own Key)
+
+Quick-Pick n'impose aucun modèle payant ou propriétaire. Cliquez sur l'icône **⚙️** dans l'en-tête pour configurer vos suggestions :
+
+1. **Protocole OpenAI / Ollama / Groq** :
+   - **Base URL** : `https://api.openai.com/v1`, `http://localhost:11434/v1`, ou `https://api.groq.com/openai/v1`
+   - **Modèle** : `gpt-4o-mini`, `llama3.2`, `mistral`, etc.
+   - **Clé API** : Votre clé privée (conservée uniquement dans le `localStorage` de votre navigateur).
+2. **Webhook / API Custom** :
+   - Renseignez l'URL de votre endpoint de scoring interne recevant le payload `{ id, title, description, bullets, candidate_actions }`.
+
+---
+
+## 🦾 Intégration Agents IA (Pair-Programming & Assistants Autonomes)
+
+Quick-Pick résout le problème du **« mur de texte »** dans les chats avec les LLM (Hermes, Claude, Cursor, OpenCode, Aider). Au lieu de poser 20 questions à choix multiples par message, un agent prépare une pile de cartes, donne le lien à l'humain, puis récupère les décisions arbitrées :
+
+1. **Génération directe par un agent** :
+   ```bash
+   # L'agent peut piper du JSON directement dans le CLI
+   cat << 'EOF' | python3 deck_cli.py create --id "pr-review" --title "Revue PR #42" --items-file -
+   [
+     {
+       "id": "item-1",
+       "title": "Supprimer la dépendance legacy XYZ",
+       "bullets": ["Non maintenue depuis 2 ans", "Remplaçable par 10 lignes natives"]
+     }
+   ]
+   EOF
+   ```
+2. **Notification à l'humain** :
+   > *"J'ai préparé un lot de 5 décisions sur http://localhost:8791/#pr-review. Fais un swipe rapide quand tu as 30 secondes."*
+3. **Récupération instantanée par l'agent** :
+   ```bash
+   python3 deck_cli.py summary pr-review --format md
+   ```
+   L'agent récupère les arbitrages et commentaires pour reprendre son exécution de manière asynchrone sans bloquer la conversation.
+4. **Skill Agent standardisé** : le fichier [`skills/quick-pick/SKILL.md`](skills/quick-pick/SKILL.md) est directement importable dans vos environnements d'agents (`~/.agents/skills/quick-pick/`).
+
+---
+
+## 📋 Utilisation en Ligne de Commande (`deck_cli.py`)
+
+Les scripts d'automatisation et agents d'IA peuvent piloter les decks directement en ligne de commande :
+
+```bash
+# 1. Créer un deck depuis un fichier JSON d'items
+python3 deck_cli.py create \
+  --id "sprint-42" \
+  --title "Triage Sprint 42" \
+  --category "PRODUIT" \
+  --template "triage" \
+  --items-file items.json
+
+# Templates intégrés : triage (3 voies), binary (oui/non), priority (immédiat/tard/ignorer)
+# Actions sur-mesure : utilisez le flag --actions-file actions.json
+
+# 2. Lister les decks
+python3 deck_cli.py list
+
+# 3. Consulter l'état courant (progression)
+python3 deck_cli.py status sprint-42
+
+# 4. Obtenir le rapport de synthèse des décisions (Markdown ou JSON)
+python3 deck_cli.py summary sprint-42 --format md
+
+# 5. Réinitialiser un deck
+python3 deck_cli.py reset sprint-42
+
+# 6. Supprimer un deck
+python3 deck_cli.py delete sprint-42
+```
+
+---
+
+## 📄 Format d'un Deck (`data/decks/<id>.json`)
+
+Chaque deck est un document JSON autonome :
+
+```json
+{
+  "id": "mon-arbitrage",
+  "title": "Titre du sujet",
+  "description": "Description contextuelle",
+  "category": "AUDIT",
+  "default_actions": [
+    { "id": "approve", "label": "Garder", "direction": "east", "key": "d", "color": "success" },
+    { "id": "reject", "label": "Élaguer", "direction": "west", "key": "a", "color": "danger" },
+    { "id": "review", "label": "Reformuler", "direction": "north", "key": "w", "color": "warning" }
+  ],
+  "items": [
+    {
+      "id": "item-1",
+      "title": "Nom de l'élément",
+      "badges": [{ "label": "URGENT", "variant": "warning" }],
+      "bullets": ["Point clé 1", "Point clé 2"],
+      "description": "Détail optionnel",
+      "status": "pending",
+      "chosen_action": null,
+      "comment": null,
+      "decided_at": null
+    }
+  ]
+}
+```
+
+---
+
+## 🔒 Sécurité & Déploiement en Production
+
+Quick-Pick est conçu comme une application mono-utilisateur ou d'équipe interne :
+- Pour une exposition publique sur Internet, placez-le derrière un reverse-proxy avec authentification (Caddy avec Basic Auth, Traefik, Authelia, Cloudflare Access ou réseau privé Tailscale).
+- En-têtes de sécurité intégrés par défaut (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`).
+- Protection contre l'exfiltration de métadonnées cloud (AWS/GCP) et limitation de taille de payload (2 Mo).
+
+---
+
+## 🧪 Tests
+
+```bash
+python3 -m unittest discover tests
+```
+
+---
+
+## 📄 Licence
+
+Distribué sous licence **MIT**. Libre d'utilisation, de modification et d'auto-hébergement.

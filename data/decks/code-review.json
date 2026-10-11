@@ -1,0 +1,65 @@
+{
+  "id": "code-review",
+  "title": "Revue des PR & Propositions d'Architecture",
+  "description": "Arbitrage rapide sur les propositions techniques et refactorings",
+  "category": "TECH",
+  "default_actions": [
+    {
+      "id": "reject",
+      "label": "Fermer / Rejeter",
+      "direction": "west",
+      "key": "a",
+      "color": "danger"
+    },
+    {
+      "id": "discuss",
+      "label": "Commenter / Discuter",
+      "direction": "north",
+      "key": "w",
+      "color": "warning"
+    },
+    {
+      "id": "merge",
+      "label": "Approuver & Merger",
+      "direction": "east",
+      "key": "d",
+      "color": "success"
+    }
+  ],
+  "items": [
+    {
+      "id": "pr-104-strict-types",
+      "title": "PR #104 : Typage strict des routes d'API",
+      "badges": [
+        { "label": "REFACTOR", "variant": "info" },
+        { "label": "TESTS VERTS", "variant": "success" }
+      ],
+      "bullets": [
+        "100% de couverture de tests maintenue",
+        "Élimine 3 bugs potentiels de cast de chaînes",
+        "Aucun impact sur la compatibilité ascendante"
+      ],
+      "description": "Ajoute les validations de schémas stricts sur les requêtes entrantes.",
+      "status": "pending",
+      "chosen_action": null,
+      "decided_at": null
+    },
+    {
+      "id": "pr-108-heavy-orm",
+      "title": "PR #108 : Ajout d'un ORM tiers pour remplacer SQL",
+      "badges": [
+        { "label": "DÉPENDANCE", "variant": "warning" },
+        { "label": "PERF RISQUÉE", "variant": "danger" }
+      ],
+      "bullets": [
+        "Ajoute 45 Mo de dépendances au conteneur",
+        "Ralentit le cold start de 350ms",
+        "Requêtes actuelles simples et parfaitement indexées"
+      ],
+      "description": "Remplacement des requêtes SQLite natives par un framework ORM volumineux.",
+      "status": "pending",
+      "chosen_action": null,
+      "decided_at": null
+    }
+  ]
+}

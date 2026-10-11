@@ -1,0 +1,136 @@
+/* Stack Réelle de Cartes Carrées Organiques */
+#view-game {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.card-stack-container {
+  position: relative;
+  width: 100%;
+  max-width: min(390px, 88vw);
+  aspect-ratio: 1 / 1;
+  margin: 16px auto 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Format carré strict pour toutes les cartes */
+.square-card {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  transform-origin: center center;
+  user-select: none;
+}
+
+/* Cartes réelles empilées en-dessous (effet physique organique) */
+.under-card {
+  pointer-events: none;
+  filter: brightness(0.92);
+  opacity: 0.88;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+}
+.under-card.layer-2 {
+  opacity: 0.65;
+  filter: brightness(0.84);
+}
+
+/* Carte active au-dessus */
+.active-card, .active-card * {
+  touch-action: none !important;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.active-card {
+  cursor: grab;
+  background: var(--panel);
+}
+.active-card:active { cursor: grabbing; }
+
+/* Contenu intérieur de la carte carrée */
+.card-inner {
+  height: 100%;
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.card-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.badge-tag {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+  padding: 3px 8px; border-radius: 6px; text-transform: uppercase;
+}
+.badge-tag.success { background: rgba(34, 197, 94, 0.15); color: #4ADE80; }
+.badge-tag.warning { background: rgba(245, 158, 11, 0.15); color: #FBBF24; }
+.badge-tag.danger { background: rgba(239, 68, 68, 0.15); color: #F87171; }
+.badge-tag.info { background: rgba(56, 189, 248, 0.15); color: #38BDF8; }
+.badge-tag.neutral { background: rgba(156, 163, 175, 0.15); color: #D1D5DB; }
+
+.card-title {
+  font-size: 18px; font-weight: 700; line-height: 1.35; margin-bottom: 8px;
+}
+.card-description {
+  font-size: 12.5px; line-height: 1.4; color: #94A3B8; margin-bottom: 12px;
+}
+.bullet-list {
+  list-style: none; display: flex; flex-direction: column; gap: 8px; margin-top: auto;
+}
+.bullet-item {
+  position: relative; padding-left: 18px; font-size: 13.5px; line-height: 1.45; color: #E2E8F0;
+}
+.bullet-item::before {
+  content: ""; position: absolute; left: 4px; top: 7px;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--muted);
+}
+
+/* Barre de commentaire optionnel */
+.comment-bar {
+  width: 100%; max-width: min(390px, 88vw); margin-bottom: 12px;
+}
+.comment-input {
+  width: 100%; height: 42px; background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border); border-radius: var(--radius-btn);
+  color: #F8FAFC; font-size: 13px; padding: 0 14px;
+  outline: none; transition: border-color 0.15s ease;
+}
+.comment-input:focus { border-color: var(--border-focus); background: rgba(0, 0, 0, 0.5); }
+.comment-input::placeholder { color: #64748B; font-size: 12.5px; }
+
+/* Dock Clavier Desktop */
+.kinetic-dock {
+  width: 100%; max-width: min(390px, 88vw); display: flex; gap: 10px;
+}
+.action-key-button {
+  flex: 1; min-height: 48px; background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border); border-radius: var(--radius-btn);
+  color: var(--text); font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  cursor: pointer; transition: all 0.12s ease;
+}
+.action-key-button:hover { background: rgba(255, 255, 255, 0.08); border-color: var(--border-focus); }
+.keycap-badge {
+  font-size: 10px; padding: 2px 6px; border-radius: 4px;
+  border: 1px solid var(--border); background: rgba(0, 0, 0, 0.4); color: var(--muted);
+}
+
+/* Edge indicators */
+.edge-indicator {
+  position: fixed; pointer-events: none; z-index: 100; opacity: 0; transition: opacity 0.15s ease;
+}
+.edge-indicator.north { top: 0; left: 0; right: 0; height: 6px; background: var(--warning); box-shadow: 0 4px 20px var(--warning-glow); }
+.edge-indicator.south { bottom: 0; left: 0; right: 0; height: 6px; background: var(--info); box-shadow: 0 -4px 20px var(--info-glow); }
+.edge-indicator.west { top: 0; bottom: 0; left: 0; width: 6px; background: var(--danger); box-shadow: 4px 0 20px var(--danger-glow); }
+.edge-indicator.east { top: 0; bottom: 0; right: 0; width: 6px; background: var(--success); box-shadow: -4px 0 20px var(--success-glow); }
+.edge-indicator.active { opacity: 1; }
+
+@media (max-width: 640px) {
+  .kinetic-dock { display: none !important; }
+}

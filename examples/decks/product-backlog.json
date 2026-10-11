@@ -1,0 +1,82 @@
+{
+  "id": "product-backlog",
+  "title": "Triage du Backlog Produit",
+  "description": "Arbitrage des fonctionnalités et améliorations pour le prochain sprint",
+  "category": "PRODUIT",
+  "default_actions": [
+    {
+      "id": "reject",
+      "label": "Élaguer / Rejeter",
+      "direction": "west",
+      "key": "a",
+      "color": "danger"
+    },
+    {
+      "id": "review",
+      "label": "À revoir / Préciser",
+      "direction": "north",
+      "key": "w",
+      "color": "warning"
+    },
+    {
+      "id": "approve",
+      "label": "Valider pour le sprint",
+      "direction": "east",
+      "key": "d",
+      "color": "success"
+    }
+  ],
+  "items": [
+    {
+      "id": "feat-export-csv",
+      "title": "Export des données en CSV/Excel",
+      "badges": [
+        { "label": "DEMANDE CLIENT", "variant": "warning" },
+        { "label": "QUICK WIN", "variant": "success" }
+      ],
+      "bullets": [
+        "Réclamé par 14 utilisateurs lors des retours du mois",
+        "Estimation de charge : 0.5 jour de dev",
+        "Format standard UTF-8 avec téléchargement navigateur"
+      ],
+      "description": "Permettre aux utilisateurs d'extraire la table des décisions en un clic.",
+      "status": "pending",
+      "chosen_action": null,
+      "decided_at": null
+    },
+    {
+      "id": "feat-dark-mode",
+      "title": "Mode sombre automatique (OS)",
+      "badges": [
+        { "label": "UI/UX", "variant": "info" },
+        { "label": "ACCESSIBILITÉ", "variant": "neutral" }
+      ],
+      "bullets": [
+        "Détecte la préférence système `prefers-color-scheme`",
+        "Ne requiert aucune refonte structurelle du DOM",
+        "Variables CSS déjà préparées"
+      ],
+      "description": "Améliore le confort visuel lors d'une utilisation tardive ou prolongée.",
+      "status": "pending",
+      "chosen_action": null,
+      "decided_at": null
+    },
+    {
+      "id": "feat-sso-saml",
+      "title": "Authentification d'entreprise SSO SAML",
+      "badges": [
+        { "label": "ENTREPRISE", "variant": "danger" },
+        { "label": "LOURD", "variant": "neutral" }
+      ],
+      "bullets": [
+        "Nécessite la mise en place d'un serveur d'identité ou Okta",
+        "Demande d'un seul prospect grand compte non engagé",
+        "Complexité de maintenance élevée"
+      ],
+      "description": "Intégration d'un connecteur d'annuaire d'entreprise.",
+      "status": "pending",
+      "chosen_action": null,
+      "decided_at": null
+    }
+  ]
+}
