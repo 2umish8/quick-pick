@@ -158,6 +158,33 @@ def is_allowed_origin(origin, allowed_hosts=None, server_port=None, host_header=
         return False
     return True
 
+# Provider origins allowed by connect-src for the opt-in direct browser mode.
+# Self-hosted providers (Ollama, vLLM, ...) are added via QUICK_PICK_CSP_CONNECT_SRC.
+DEFAULT_CSP_CONNECT_ORIGINS = ("https://api.openai.com", "https://api.groq.com", "https://openrouter.ai")
+PERMISSIONS_POLICY = (
+    "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), "
+    "geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), "
+    "picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), usb=(), xr-spatial-tracking=()"
+)
+
+
+def build_content_security_policy():
+    """Strict CSP: no inline script/style. connect-src allows the opt-in direct browser mode."""
+    extra_origins = os.environ.get("QUICK_PICK_CSP_CONNECT_SRC", "").split()
+    connect_src = " ".join(["'self'", *DEFAULT_CSP_CONNECT_ORIGINS, *extra_origins])
+    return "; ".join([
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self'",
+        "img-src 'self' data:",
+        "font-src 'self'",
+        f"connect-src {connect_src}",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ])
+
 
 def utc_now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -178,6 +205,8 @@ class QuickPickHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Content-Security-Policy", build_content_security_policy())
+        self.send_header("Permissions-Policy", PERMISSIONS_POLICY)
 
     def send_json(self, status, payload, head_only=False):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
