@@ -1,242 +1,256 @@
-# ⚡ Quick-Pick
+# Quick-Pick
 
-> Interface de décision et tri rapide 1 carte à la fois (mobile & desktop).  
-> Tranchez vos backlogs, relectures de code, idées ou audits sans distraction, avec swipe physique ou touches clavier, et assistance IA optionnelle (BYOK).
+**Your AI agent asks you 20 questions at once as a stack of cards. You swipe through them, and the agent picks up your decisions.** No more wall of text in your LLM chat.
 
----
+[Version française](README.fr.md)
 
-## ✨ Points Forts
+<!-- TODO GIF (docs/demo.gif, not in the repo yet): 10 s, mobile swipe -> keyboard -> deck_cli summary -->
 
-* **Zéro Dépendance** : 100% Python standard library (`server.py`). Aucun bundler, démarre instantanément (installation par `pip` optionnelle).
-* **Mobile-First & Clavier Desktop** : Swipe tactile physique fluide (`passive: false`) sur smartphone, flèches directionnelles et touches dédiées (`a`/`d`/`w`) sur desktop.
-* **Anti-Fork & BYOK Intégré** : Support natif universel des APIs OpenAI-compatibles (OpenAI `gpt-4o-mini`, Ollama local `llama3.2`, Groq, OpenRouter) et des webhooks de scoring custom.
-* **Persistance Simple & Propre** : Decks stockés en fichiers JSON lisibles et manipulables par scripts ou agents IA (`deck_cli.py`).
-* **Ergonomie Sans Stress** : Pas de compteurs anxiogènes pendant le tri, historique de décision consultable à tout moment, champ note contextuel et annulation complète (`Ctrl+Z`).
+## Why
 
----
+When you work with coding agents and assistants (Claude, Cursor, Hermes, OpenCode, Aider…), they often need many small decisions from you: keep or drop this dependency, approve or rework this rule, now or later for this ticket. In a chat, that turns into a long message with 20 multiple-choice questions, and answering it is slow and error-prone.
 
-## 🚀 Démarrage Rapide
+Quick-Pick turns those questions into a deck of cards. The agent creates the deck, sends you a link, you decide one card at a time (swipe on mobile, keys on desktop), and the agent reads back a summary of your decisions and comments. It also works on its own for backlogs, code reviews, ideas or audits: create a deck from the home screen by pasting a list, with optional AI suggestions (bring your own key).
 
-### Option A : En local (5 secondes, zéro dépendance)
+## Highlights
+
+- **Zero dependencies**: 100% Python standard library (`server.py`). No `pip install` required, no bundler, starts instantly.
+- **Mobile-first, keyboard on desktop**: smooth physical swipe on phones (`passive: false`), arrow keys and dedicated keys (`a` / `d` / `w`) on desktop.
+- **Create decks anywhere**: paste a list in the web UI (one line = one card), call `POST /api/decks`, or use `deck_cli.py`.
+- **Built-in BYOK**: works with any OpenAI-compatible API (OpenAI `gpt-4o-mini`, local Ollama `llama3.2`, Groq, OpenRouter) and custom scoring webhooks. The key stays in your browser session by default.
+- **Secure defaults**: optional API token (required as soon as the server listens beyond localhost), strict Content Security Policy, AI proxy that refuses private addresses and never follows redirects.
+- **Plain JSON storage**: decks are readable JSON files that scripts and AI agents can edit.
+- **Calm by design**: no anxiety-inducing counters while you sort, decision history available at any time, a note field per card, and full undo (`Ctrl+Z`).
+
+Note: the interface strings are currently in French.
+
+## Quickstart
+
+### Option A: local (zero dependencies)
 
 ```bash
 git clone https://github.com/2umish8/quick-pick.git
 cd quick-pick
 python3 server.py
 ```
-👉 Ouvrez votre navigateur sur **`http://localhost:8791`**.
 
-### Option B : Installation par pip
+Open **`http://localhost:8791`** in your browser. On `127.0.0.1` (the default) no token is needed.
+
+### Option B: pip (from GitHub)
+
+Quick-Pick is not on PyPI yet; install it straight from the repository:
 
 ```bash
-pip install quick-pick
-quick-pick              # serveur web sur http://localhost:8791
-quick-pick-cli list     # CLI de gestion des decks
+pip install git+https://github.com/2umish8/quick-pick.git
+quick-pick              # web server on http://localhost:8791
+quick-pick-cli list     # deck management CLI
 ```
 
-L'installation embarque le front (`public/`) et les decks d'exemple (`examples/`). Le dépôt reste
-utilisable tel quel : `python3 server.py` fonctionne toujours depuis un clone.
+The install ships the front end (`public/`) and the example decks (`examples/`). `python3 server.py` keeps working from a clone.
 
-### Option C : Avec Docker Compose (Recommandé en Self-Host)
+### Option C: Docker Compose (recommended for self-hosting)
+
+Inside the container the server listens on `0.0.0.0`, so an API token is required. Compose refuses to start without `QUICK_PICK_TOKEN`:
 
 ```bash
-# Choisir un jeton d'API (obligatoire : le conteneur écoute sur 0.0.0.0)
-export QUICK_PICK_TOKEN="un-jeton-long-et-aleatoire"
+# Pick a random token (or put QUICK_PICK_TOKEN=... in a .env file next to docker-compose.yml)
+export QUICK_PICK_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 docker compose up -d
 ```
-👉 Le service est immédiatement opérationnel avec persistance des données dans `./data/decks`. Ouvrez ensuite **`http://localhost:8791/#token=<votre-jeton>`** : le jeton est conservé pour la session de l'onglet uniquement (jamais dans la chaîne de requête), puis retiré du fragment d'URL, et joint automatiquement à chaque appel d'API. Sur une machine de confiance, ajoutez `&remember=1` (`#token=<jeton>&remember=1`) pour le conserver dans le `localStorage` ; sinon, vous pouvez aussi le saisir à l'invite affichée en cas de `401 unauthorized`.
 
-L'image Docker est figée sur un digest (`python:3.12-alpine`), tourne sous un utilisateur non privilégié
-(`quickpick`, UID 10001) et expose un `HEALTHCHECK` sur `/api/health`. Docker Compose lance le conteneur
-avec l'UID de l'hôte (1000 par défaut) pour que le dossier `./data/decks` monté reste accessible :
+The port is published on the host loopback only (`127.0.0.1:8791`), and decks persist in `./data/decks`. Then open **`http://localhost:8791/#token=<your-token>`**: the token is read from the URL fragment (never the query string), removed from the address bar, kept for the tab session only, and attached to every API call. On a trusted machine, add `&remember=1` (`#token=<token>&remember=1`) to keep it in `localStorage`. You can also type it at the prompt shown after a `401 unauthorized`.
+
+The image is pinned by digest (`python:3.12-alpine`), runs as an unprivileged user (`quickpick`, UID 10001) and has a `HEALTHCHECK` on `/api/health`. Compose runs the container with your host UID (1000 by default) so the mounted `./data/decks` stays writable:
 
 ```bash
-# Si votre UID Linux est différent de 1000 :
+# If your Linux UID is not 1000:
 export QUICK_PICK_UID=$(id -u) QUICK_PICK_GID=$(id -g)
 docker compose up -d
 ```
 
-Vérification rapide : `docker compose ps` doit afficher `(healthy)`, `curl -H "X-Quick-Pick-Token: $QUICK_PICK_TOKEN" http://localhost:8791/api/health` doit répondre `{"ok": true, ...}`.
+Quick check: `docker compose ps` should show `(healthy)`, and `curl -H "X-Quick-Pick-Token: $QUICK_PICK_TOKEN" http://localhost:8791/api/health` should answer `{"ok": true, ...}`.
 
----
+## Create a deck from the web UI
 
-## 🛠️ Variables d'Environnement
+No terminal needed: on the home screen, click **Créer un deck** ("Create a deck"), give it a title, pick a decision template (`triage`, `binary` or `priority`) and paste your items, **one line per card**. The deck is created and sorting starts right away. From the summary screen, **Copier en Markdown** ("Copy as Markdown") exports your decisions with their labels.
 
-| Variable | Défaut | Description |
-|---|---|---|
-| `QUICK_PICK_HOST` | `127.0.0.1` (`0.0.0.0` dans Docker) | Adresse IP d'écoute du serveur |
-| `QUICK_PICK_PORT` | `8791` | Port d'écoute HTTP |
-| `QUICK_PICK_DATA_DIR` | `./data/decks` | Dossier de stockage des fichiers JSON de decks (non versionné, seedé depuis `examples/decks/` au premier lancement) |
-| `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS` | `0` | Autoriser le proxy IA à requêter des endpoints privés/locaux (ex : Ollama sur `127.0.0.1:11434`). Mettre à `1` pour utiliser un LLM local (voir § Assistance IA) |
-| `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS` | (vide) | Liste optionnelle de noms d'hôtes autorisés pour le proxy IA, séparés par des virgules (ex : `api.openai.com`). Si renseignée, tout endpoint dont l'hôte n'est pas listé est refusé |
-| `QUICK_PICK_TOKEN` | (vide) | Jeton d'authentification de l'API (`Authorization: Bearer <jeton>` ou `X-Quick-Pick-Token: <jeton>`). Obligatoire si le serveur écoute sur une adresse non locale |
-| `QUICK_PICK_ALLOWED_HOSTS` | (vide) | Noms d'hôtes supplémentaires acceptés dans l'en-tête `Host`, séparés par des virgules (le serveur accepte toujours `localhost`, `127.0.0.1` et `::1`) |
-| `QUICK_PICK_API_KEY` | *(vide)* | Clé API utilisée par `deck_cli.py classifier` quand `--api-key-stdin` n'est pas fourni |
-| `QUICK_PICK_CSP_CONNECT_SRC` | *(vide)* | Origines supplémentaires autorisées par la CSP `connect-src`, séparées par des espaces (ex: `http://localhost:11434`) |
-
-> **Note :** si un en-tête `Origin` est présent, il doit correspondre exactement à l'en-tête `Host` de la requête (même hôte et même port) ; derrière un reverse-proxy, transmettez l'en-tête `Host` d'origine et ajoutez le nom public à `QUICK_PICK_ALLOWED_HOSTS`.
-
----
-
-## 🤖 Assistance IA & BYOK (Bring Your Own Key)
-
-Quick-Pick n'impose aucun modèle payant ou propriétaire. Cliquez sur l'icône **⚙️** dans l'en-tête pour configurer vos suggestions :
-
-1. **Protocole OpenAI / Ollama / Groq** :
-   - **Base URL** : `https://api.openai.com/v1`, `http://localhost:11434/v1`, ou `https://api.groq.com/openai/v1`
-   - **Modèle** : `gpt-4o-mini`, `llama3.2`, `mistral`, etc.
-   - **Clé API** : votre clé privée.
-2. **Webhook / API Custom** :
-   - Renseignez l'URL de votre endpoint de scoring interne recevant le payload `{ id, title, description, bullets, candidate_actions }`.
-
-> **LLM local (Ollama) :** les endpoints privés et locaux sont bloqués par défaut. Pour utiliser Ollama ou un modèle local, démarrez le serveur avec `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. En Docker, le conteneur ne peut pas joindre `127.0.0.1` de l'hôte : utilisez `host.docker.internal` comme hôte d'endpoint (ex : `http://host.docker.internal:11434/v1`) avec `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. Sous Linux, décommentez le bloc `extra_hosts` du `docker-compose.yml` pour résoudre `host.docker.internal` via `host-gateway`. Pour restreindre davantage le proxy, renseignez `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS` (ex : `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS=api.openai.com`).
-
-### 🔐 Où vit votre clé API
-
-La clé n'est **jamais** écrite sur le disque par le serveur et n'est envoyée à aucun service tiers par Quick-Pick. Deux emplacements possibles, choisis dans les réglages :
-
-| Choix | Stockage | Durée de vie |
-|---|---|---|
-| Par défaut | `sessionStorage` du navigateur | Effacée à la fermeture de l'onglet |
-| « Mémoriser sur cet appareil » | `localStorage` du navigateur | Persiste, jusqu'au bouton **Oublier la clé** |
-
-Une clé déjà enregistrée dans `localStorage` par une version antérieure reste utilisable telle quelle : elle est signalée comme mémorisée dans la modale, avec le bouton pour l'oublier. Aucun réglage existant n'est écrasé silencieusement.
-
-### 📡 Deux modes d'appel du fournisseur
-
-| Mode | Quand | Où part la clé |
-|---|---|---|
-| **Via le serveur** (par défaut) | Toujours disponible | Elle **transite par le serveur quick-pick** |
-| **Appel direct depuis le navigateur** | Option dans les réglages, API compatibles OpenAI uniquement | Elle reste dans le navigateur, le serveur ne la voit jamais |
-
-> ⚠️ **Mode proxy (défaut)** : la clé est transmise au fournisseur *par* le serveur quick-pick. Sur une instance partagée, l'opérateur du serveur peut la voir dans les journaux ou en mémoire de processus. Utilisez le mode direct, ou une instance auto-hébergée, si ce n'est pas acceptable.
-
-> ⚠️ **Mode direct** : réservé aux API compatibles OpenAI qui **autorisent les appels CORS** depuis l'origine de l'application (OpenAI, Groq, OpenRouter le font ; Ollama et vLLM selon leur configuration). L'en-tête `connect-src` de la CSP n'autorise par défaut que ces fournisseurs connus : pour un fournisseur auto-hébergé, ajoutez son origine via `QUICK_PICK_CSP_CONNECT_SRC` puis redémarrez le serveur. Les webhooks custom n'ont pas de contrat CORS : ils passent toujours par le serveur.
-
----
-
-## 🦾 Intégration Agents IA (Pair-Programming & Assistants Autonomes)
-
-Quick-Pick résout le problème du **« mur de texte »** dans les chats avec les LLM (Hermes, Claude, Cursor, OpenCode, Aider). Au lieu de poser 20 questions à choix multiples par message, un agent prépare une pile de cartes, donne le lien à l'humain, puis récupère les décisions arbitrées :
-
-1. **Génération directe par un agent** :
-   ```bash
-   # L'agent peut piper du JSON directement dans le CLI
-   cat << 'EOF' | python3 deck_cli.py create --id "pr-review" --title "Revue PR #42" --items-file -
-   [
-     {
-       "id": "item-1",
-       "title": "Supprimer la dépendance legacy XYZ",
-       "bullets": ["Non maintenue depuis 2 ans", "Remplaçable par 10 lignes natives"]
-     }
-   ]
-   EOF
-   ```
-2. **Notification à l'humain** :
-   > *"J'ai préparé un lot de 5 décisions sur http://localhost:8791/#pr-review. Fais un swipe rapide quand tu as 30 secondes."*
-3. **Récupération instantanée par l'agent** :
-   ```bash
-   python3 deck_cli.py summary pr-review --format md
-   ```
-   L'agent récupère les arbitrages et commentaires pour reprendre son exécution de manière asynchrone sans bloquer la conversation.
-4. **Skill Agent standardisé** : le fichier [`skills/quick-pick/SKILL.md`](skills/quick-pick/SKILL.md) est directement importable dans vos environnements d'agents (`~/.agents/skills/quick-pick/`).
-
----
-
-## 🆕 Créer un Deck depuis l'Interface Web
-
-Sans terminal : sur l'écran d'accueil, cliquez sur **Créer un deck**, donnez un titre, choisissez un modèle de décision (`triage`, `binary` ou `priority`) et collez vos éléments **une ligne par carte**. Le deck est créé et le tri démarre immédiatement. Depuis le récapitulatif, le bouton **Copier en Markdown** exporte vos décisions avec leurs libellés.
-
-L'API équivalente (utile pour les agents) :
+The same thing over the API (handy for agents):
 
 ```bash
 curl -X POST http://localhost:8791/api/decks \
   -H 'Content-Type: application/json' \
   -d '{
-        "title": "Tri du backlog Q4",
+        "title": "Q4 backlog triage",
         "template": "triage",
-        "items": ["Migrer la base vers Postgres", "Supprimer le module legacy"]
+        "items": ["Move the database to Postgres", "Remove the legacy module"]
       }'
+# When QUICK_PICK_TOKEN is set, add: -H "Authorization: Bearer $QUICK_PICK_TOKEN"
 ```
 
-| Champ | Requis | Règle de validation |
+| Field | Required | Validation |
 |---|---|---|
-| `title` | oui | non vide, 120 caractères max |
-| `items` | oui | tableau de lignes non vides, 500 caractères par carte, 200 cartes max |
-| `template` | non (`triage`) | `triage`, `binary` ou `priority` |
-| `id` | non | slug généré depuis le titre ; sinon `^[a-zA-Z0-9_-]{1,128}$` |
+| `title` | yes | non-empty, 120 characters max |
+| `items` | yes | array of non-empty lines, 500 characters per card, 200 cards max |
+| `template` | no (`triage`) | `triage`, `binary` or `priority` |
+| `id` | no | slug generated from the title; otherwise `^[a-zA-Z0-9_-]{1,128}$` |
 
-Réponses : `201` avec l'état du deck, `400` sur une entrée invalide, `409` si l'identifiant demandé existe déjà (un deck n'est **jamais** écrasé). Pour une description, une catégorie ou des actions sur-mesure, passez par `deck_cli create`.
+Responses: `201` with the deck state, `400` on invalid input, `409` if the requested id already exists (a deck is **never** overwritten). For a description, a category or custom actions, use `deck_cli.py create`.
 
----
+## Keyboard shortcuts
 
-## 📋 Utilisation en Ligne de Commande (`deck_cli.py`)
+| Key | Action |
+|---|---|
+| `d` / `→` | Action on the right (e.g. keep / approve) |
+| `a` / `←` | Action on the left (e.g. drop / reject) |
+| `w` / `↑` | Action on top (e.g. review / later) |
+| `x` / `Esc` | Skip the card |
+| `c` | Focus the note field |
+| `Ctrl+Z` / `Cmd+Z` | Undo |
 
-Les scripts d'automatisation et agents d'IA peuvent piloter les decks directement en ligne de commande :
+Exact actions depend on the deck (see [deck format](#deck-format-datadecksidjson)).
+
+## Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `QUICK_PICK_HOST` | `127.0.0.1` (`0.0.0.0` in Docker) | Server listen address |
+| `QUICK_PICK_PORT` | `8791` | HTTP port |
+| `QUICK_PICK_DATA_DIR` | `./data/decks` | Folder where deck JSON files are stored (not versioned, seeded from `examples/decks/` on first run) |
+| `QUICK_PICK_TOKEN` | *(empty)* | API token (`Authorization: Bearer <token>` or `X-Quick-Pick-Token: <token>`). Required when the server listens on a non-loopback address: without it the server refuses to start |
+| `QUICK_PICK_ALLOWED_HOSTS` | *(empty)* | Extra host names accepted in the `Host` header, comma-separated (`localhost`, `127.0.0.1` and `::1` are always accepted) |
+| `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS` | `0` | Let the AI proxy call private/local endpoints (e.g. Ollama on `127.0.0.1:11434`). Set to `1` to use a local LLM (see [AI suggestions](#ai-suggestions-and-byok-bring-your-own-key)). Cloud metadata addresses stay blocked |
+| `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS` | *(empty)* | Optional comma-separated allowlist of host names the AI proxy may call (e.g. `api.openai.com`). When set, any other host is refused |
+| `QUICK_PICK_CSP_CONNECT_SRC` | *(empty)* | Extra origins allowed by the CSP `connect-src` for the direct browser mode, space-separated (e.g. `http://localhost:11434`) |
+| `QUICK_PICK_API_KEY` | *(empty)* | API key used by `deck_cli.py classifier` when `--api-key-stdin` is not given |
+
+> **Note:** when an `Origin` header is present, it must match the request `Host` exactly (same host and port). Behind a reverse proxy, forward the original `Host` header and add the public name to `QUICK_PICK_ALLOWED_HOSTS`.
+
+## AI suggestions and BYOK (bring your own key)
+
+Quick-Pick does not require any paid or proprietary model. Click the **⚙️** icon in the header to configure suggestions:
+
+1. **OpenAI / Ollama / Groq protocol**:
+   - **Base URL**: `https://api.openai.com/v1`, `http://localhost:11434/v1`, or `https://api.groq.com/openai/v1`
+   - **Model**: `gpt-4o-mini`, `llama3.2`, `mistral`, etc.
+   - **API key**: your private key (see where it is stored below).
+2. **Custom webhook / API**:
+   - Enter the URL of your own scoring endpoint. It receives the payload `{ id, title, description, bullets, candidate_actions }`.
+
+> **Local LLM (Ollama):** private and local endpoints are blocked by default. To use Ollama or another local model, start the server with `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. In Docker, the container cannot reach the host's `127.0.0.1`: use `host.docker.internal` as the endpoint host (e.g. `http://host.docker.internal:11434/v1`) together with `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. On Linux, uncomment the `extra_hosts` block in `docker-compose.yml` so `host.docker.internal` resolves through `host-gateway`. To narrow the proxy further, set `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS` (e.g. `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS=api.openai.com`).
+
+### Where your API key lives
+
+The server **never** writes the key to disk, and Quick-Pick never sends it to any third party other than the provider you configured. Two storage options, chosen in the settings:
+
+| Choice | Storage | Lifetime |
+|---|---|---|
+| Default | browser `sessionStorage` | Cleared when the tab is closed |
+| "Mémoriser la clé sur cet appareil" (remember on this device) | browser `localStorage` | Persists until you click **Oublier la clé** (forget the key) |
+
+A key saved in `localStorage` by an earlier version keeps working as is: it is shown as remembered in the settings, with the button to forget it. No existing setting is silently overwritten.
+
+### Two ways to call the provider
+
+| Mode | When | Where the key goes |
+|---|---|---|
+| **Through the server** (default) | Always available | It **goes through your Quick-Pick server**, which forwards it as `Authorization: Bearer` |
+| **Direct from the browser** | Settings option, OpenAI-compatible APIs only | It stays in the browser; the server never sees it |
+
+> ⚠️ **Proxy mode (default):** the key reaches the provider *through* the Quick-Pick server. On a shared instance, whoever runs the server could see it in logs or process memory. Use direct mode, or your own instance, if that is not acceptable.
+
+> ⚠️ **Direct mode:** only for OpenAI-compatible APIs that **allow CORS** from the app's origin (OpenAI, Groq and OpenRouter do; Ollama and vLLM depend on their configuration). By default the CSP `connect-src` only allows those known providers: for a self-hosted provider, add its origin to `QUICK_PICK_CSP_CONNECT_SRC` and restart the server. Custom webhooks have no CORS contract and always go through the server.
+
+## Using Quick-Pick with AI agents
+
+Quick-Pick solves the **"wall of text"** problem in LLM chats (Hermes, Claude, Cursor, OpenCode, Aider). Instead of asking 20 multiple-choice questions in one message, an agent prepares a deck of cards, gives the link to the human, then reads back the decisions:
+
+1. **The agent creates the deck** (with the CLI below, or with `POST /api/decks`):
+   ```bash
+   # The agent can pipe JSON straight into the CLI
+   cat << 'EOF' | python3 deck_cli.py create --id "pr-review" --title "Review PR #42" --items-file -
+   [
+     {
+       "id": "item-1",
+       "title": "Remove legacy dependency XYZ",
+       "bullets": ["Unmaintained for 2 years", "Replaceable with 10 lines of native code"]
+     }
+   ]
+   EOF
+   ```
+2. **The agent notifies the human**:
+   > *"I've prepared 5 decisions at http://localhost:8791/#pr-review. Swipe through them when you have 30 seconds."*
+
+   If the instance uses a token, the link can carry it in the fragment: `http://localhost:8791/#pr-review&token=<token>`.
+3. **The agent reads the decisions back**:
+   ```bash
+   python3 deck_cli.py summary pr-review --format md
+   ```
+   The agent gets the decisions and comments and resumes its work asynchronously, without blocking the conversation.
+4. **Agent skill**: [`skills/quick-pick/SKILL.md`](skills/quick-pick/SKILL.md) can be dropped into your agent environment (`~/.agents/skills/quick-pick/`).
+
+## Command line (`deck_cli.py`)
+
+Scripts and AI agents can drive decks from the command line (`quick-pick-cli` is the same tool when installed with pip):
 
 ```bash
-# 1. Créer un deck depuis un fichier JSON d'items
+# 1. Create a deck from a JSON items file
 python3 deck_cli.py create \
   --id "sprint-42" \
-  --title "Triage Sprint 42" \
-  --category "PRODUIT" \
+  --title "Sprint 42 triage" \
+  --category "PRODUCT" \
   --template "triage" \
   --items-file items.json
 
-# Templates intégrés : triage (3 voies), binary (oui/non), priority (immédiat/tard/ignorer)
-# Actions sur-mesure : utilisez le flag --actions-file actions.json
+# Built-in templates: triage (3 ways), binary (yes/no), priority (now/later/ignore)
+# Custom actions: use --actions-file actions.json
+# Optional: --description, --guidelines (decision criteria shown to the human)
 
-# 2. Lister les decks
+# 2. List decks
 python3 deck_cli.py list
 
-# 3. Consulter l'état courant (progression)
+# 3. Show current state (progress)
 python3 deck_cli.py status sprint-42
 
-# 4. Obtenir le rapport de synthèse des décisions (Markdown ou JSON)
+# 4. Get the decision summary (Markdown or JSON, default JSON)
 python3 deck_cli.py summary sprint-42 --format md
 
-# 5. Réinitialiser un deck
+# 5. Reset a deck
 python3 deck_cli.py reset sprint-42
 
-# 6. Supprimer un deck
+# 6. Delete a deck
 python3 deck_cli.py delete sprint-42
 
-# 7. Tester un classifieur externe (la clé ne doit pas passer en argument)
+# 7. Test an external classifier (never pass the key as an argument)
 echo "$MY_KEY" | python3 deck_cli.py classifier --endpoint https://api.openai.com/v1 --api-key-stdin
 QUICK_PICK_API_KEY="$MY_KEY" python3 deck_cli.py classifier --endpoint https://api.openai.com/v1
 ```
 
-> `--api-key` reste accepté pour compatibilité mais affiche un avertissement : la clé est visible dans `ps` et dans l'historique du shell. Préférez `--api-key-stdin` ou `QUICK_PICK_API_KEY`.
+> `--api-key` is still accepted for compatibility but prints a warning: the key would be visible in `ps` and in your shell history. Prefer `--api-key-stdin` or `QUICK_PICK_API_KEY`.
 
----
+## Deck format (`data/decks/<id>.json`)
 
-## 📄 Format d'un Deck (`data/decks/<id>.json`)
+The `data/` folder is **not** versioned: it holds your decks. On first run, if it contains no deck yet, the example decks from `examples/decks/` are copied into it. An existing deck is never overwritten or deleted (neither at startup nor during an upgrade). To get an example back, delete that file from `data/decks/` and restart the server.
 
-Le dossier `data/` n'est **pas** versionné : il contient vos decks. Au premier lancement, s'il ne
-contient aucun deck, les decks d'exemple de `examples/decks/` y sont copiés tels quels. Un deck
-existant n'est jamais écrasé ni supprimé (ni au démarrage, ni pendant une mise à jour) : pour repartir
-des exemples, supprimez le fichier concerné de `data/decks/` puis relancez le serveur.
-
-Chaque deck est un document JSON autonome :
+Each deck is a self-contained JSON document:
 
 ```json
 {
-  "id": "mon-arbitrage",
-  "title": "Titre du sujet",
-  "description": "Description contextuelle",
+  "id": "my-decision",
+  "title": "Topic title",
+  "description": "Context",
   "category": "AUDIT",
   "default_actions": [
-    { "id": "approve", "label": "Garder", "direction": "east", "key": "d", "color": "success" },
-    { "id": "reject", "label": "Élaguer", "direction": "west", "key": "a", "color": "danger" },
-    { "id": "review", "label": "Reformuler", "direction": "north", "key": "w", "color": "warning" }
+    { "id": "approve", "label": "Keep", "direction": "east", "key": "d", "color": "success" },
+    { "id": "reject", "label": "Drop", "direction": "west", "key": "a", "color": "danger" },
+    { "id": "review", "label": "Rework", "direction": "north", "key": "w", "color": "warning" }
   ],
   "items": [
     {
       "id": "item-1",
-      "title": "Nom de l'élément",
+      "title": "Item name",
       "badges": [{ "label": "URGENT", "variant": "warning" }],
-      "bullets": ["Point clé 1", "Point clé 2"],
-      "description": "Détail optionnel",
+      "bullets": ["Key point 1", "Key point 2"],
+      "description": "Optional details",
       "status": "pending",
       "chosen_action": null,
       "comment": null,
@@ -246,36 +260,37 @@ Chaque deck est un document JSON autonome :
 }
 ```
 
-> **Validation à la lecture** : au chargement, chaque deck est contrôlé — `items` doit être un tableau JSON et chaque item doit porter un `id` et un `title` non vides. Un deck non conforme renvoie une erreur `404` explicite ; le fichier n'est jamais réécrit ni corrigé automatiquement.
+> **Read-time validation:** every deck is checked when loaded: `items` must be a JSON array and each item needs a non-empty `id` and `title`. A non-conforming deck returns an explicit `404` error; the file is never rewritten or fixed automatically.
 
----
+## Security and production deployment
 
-## 🔒 Sécurité & Déploiement en Production
+Quick-Pick is designed for a single user or an internal team:
 
-Quick-Pick est conçu comme une application mono-utilisateur ou d'équipe interne :
-- Pour une exposition publique sur Internet, placez-le derrière un reverse-proxy avec authentification (Caddy avec Basic Auth, Traefik, Authelia, Cloudflare Access ou réseau privé Tailscale).
-- En-têtes de sécurité intégrés par défaut sur toutes les réponses (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, une `Content-Security-Policy` stricte sans script ni style inline, et une `Permissions-Policy` qui coupe caméra, micro, géolocalisation, etc.).
-- Aucun script ni style inline dans l'interface : la CSP est stricte (`script-src 'self'`, `style-src 'self'`, `frame-ancestors 'none'`). Les origines autorisées par `connect-src` au-delà de `'self'` sont les fournisseurs connus, plus celles que vous déclarez via `QUICK_PICK_CSP_CONNECT_SRC`.
-- Protection contre l'exfiltration de métadonnées cloud (AWS/GCP) et limitation de taille de payload (2 Mo).
-- Durcissement intégré : le proxy IA refuse par défaut les adresses privées/locales et ne suit jamais les redirections ; le serveur vérifie l'en-tête `Host`, exige `Content-Type: application/json` sur les requêtes POST et contrôle l'en-tête `Origin`. Si le serveur écoute sur une adresse non locale (`QUICK_PICK_HOST=0.0.0.0`, Docker), un `QUICK_PICK_TOKEN` est exigé au démarrage et chaque appel `/api/*` doit le présenter. Le jeton ne transite jamais par la chaîne de requête : passez-le dans le fragment d'URL (`http://localhost:8791/#token=<jeton>`, conservé pour la session de l'onglet ; `&remember=1` pour le persister dans le `localStorage` sur une machine de confiance) ou saisissez-le à l'invite.
-- Sur les réseaux utilisant un DNS « fake-IP » (`198.18.0.0/15`, par ex. certains VPN/proxys/bacs à sable comme les modes Clash/Surge/TUN), les noms d'hôtes d'API publiques résolvent vers des adresses non globales et sont donc refusés par défaut. Contournement : désactivez le fake-IP pour ces domaines / utilisez un vrai DNS, ou (en connaissance de cause) combinez `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1` avec `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS=api.openai.com` pour restreindre les cibles.
+- **API token:** when the server listens on a non-loopback address (`QUICK_PICK_HOST=0.0.0.0`, Docker), `QUICK_PICK_TOKEN` is required at startup and every `/api/*` call must present it. The token never travels in the query string: pass it in the URL fragment (`http://localhost:8791/#token=<token>`, kept for the tab session; add `&remember=1` to keep it in `localStorage` on a trusted machine) or type it at the prompt.
+- **Request checks:** the server validates the `Host` header, requires `Content-Type: application/json` on POST requests and checks the `Origin` header.
+- **AI proxy hardening:** private and local addresses are refused by default, cloud metadata addresses (AWS/GCP/Alibaba) are always refused, each endpoint is resolved once and the connection is pinned to the validated addresses (DNS rebinding), redirects are never followed, and `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS` can restrict targets to an allowlist. Request bodies are limited to 2 MB.
+- **Browser hardening:** security headers on every response (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`), a strict `Content-Security-Policy` with no inline script or style (`script-src 'self'`, `style-src 'self'`, `frame-ancestors 'none'`; `connect-src` allows `'self'`, the known providers and whatever you add via `QUICK_PICK_CSP_CONNECT_SRC`), and a `Permissions-Policy` that turns off camera, microphone, geolocation, etc.
+- **Internet exposure:** the token is a single shared secret, not user accounts. To expose Quick-Pick on the internet, put it behind a reverse proxy with authentication (Caddy with Basic Auth, Traefik, Authelia, Cloudflare Access) or on a private network such as Tailscale.
+- **"Fake-IP" DNS:** on networks using fake-IP DNS (`198.18.0.0/15`, e.g. some VPN/proxy/sandbox modes such as Clash/Surge/TUN), public API host names resolve to non-global addresses and are refused by default. Workaround: disable fake-IP for those domains / use a real DNS, or (knowingly) combine `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1` with `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS=api.openai.com` to restrict targets.
 
----
+Security issues: see [SECURITY.md](SECURITY.md).
 
-## 🧪 Tests
+## Upgrading
+
+Release notes and upgrade steps for each version are in [CHANGELOG.md](CHANGELOG.md) (in French) and on the [releases page](https://github.com/2umish8/quick-pick/releases). Coming from 2.0.0, read the 2.0.1 security notes first: Docker now requires `QUICK_PICK_TOKEN`, and a local LLM needs `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`.
+
+## Tests
 
 ```bash
 PYTHONPATH=. python3 -m unittest discover -s tests
-ruff check .                                        # optionnel : pip install -e ".[dev]"
-node --test tests/js/*.test.mjs                      # front-end (classifieur, XSS, timeout, mobile & a11y)
+ruff check .                      # optional: pip install -e ".[dev]"
+node --test tests/js/*.test.mjs   # front end (classifier, XSS, timeout, mobile & a11y)
 ```
 
-Les mêmes vérifications tournent dans la CI à chaque pull request.
+The same checks run in CI on every pull request. The front-end checks (`tests/js/*.test.mjs`, no dependency, no DOM) also run from the unittest suite when `node` is installed, and are skipped otherwise. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-> Les checks front-end (`tests/js/*.test.mjs`, sans dépendance et sans DOM) sont lancés automatiquement via `node --test` si `node` est installé, sinon ils sont ignorés.
+## License
 
----
+Released under the **MIT** license, © 2026 Mischael Radabanoro. Free to use, modify and self-host. See [LICENSE](LICENSE).
 
-## 📄 Licence
-
-Distribué sous licence **MIT**. Libre d'utilisation, de modification et d'auto-hébergement.
+Quick-Pick by [Mowtif](https://mowtif.com)

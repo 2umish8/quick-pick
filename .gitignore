@@ -10,3 +10,6 @@ data/
 build/
 dist/
 *.egg-info/
+
+# Local secrets (e.g. QUICK_PICK_TOKEN for docker compose)
+.env
