@@ -2,6 +2,7 @@
 """quick-pick CLI — Outil d'administration et d'interfaçage agent pour les decks."""
 import argparse
 import json
+import os
 import sys
 from deck_store import (
     DeckError,
@@ -14,6 +15,12 @@ from deck_store import (
     seed_example_decks,
 )
 from deck_summary import compute_deck_summary
+
+API_KEY_ENV_VAR = "QUICK_PICK_API_KEY"
+LEGACY_API_KEY_WARNING = (
+    f"Avertissement : --api-key expose la clé dans ps et l'historique du shell. "
+    f"Préférez la variable {API_KEY_ENV_VAR} ou --api-key-stdin."
+)
 
 ACTION_TEMPLATES = {
     "triage": [
@@ -163,10 +170,25 @@ def handle_delete(args):
     print(f"Deck supprimé avec succès : {args.id}")
 
 
+def resolve_api_key(args, env=None, stdin=None):
+    """Clé API par ordre de priorité : --api-key-stdin, $QUICK_PICK_API_KEY, --api-key (déprécié)."""
+    env = os.environ if env is None else env
+    stdin = sys.stdin if stdin is None else stdin
+    if getattr(args, "api_key_stdin", False):
+        return stdin.read().strip()
+    env_key = (env.get(API_KEY_ENV_VAR) or "").strip()
+    if env_key:
+        return env_key
+    legacy_key = (getattr(args, "api_key", "") or "").strip()
+    if legacy_key:
+        print(LEGACY_API_KEY_WARNING, file=sys.stderr)
+    return legacy_key
+
+
 def handle_classifier(args):
     from classifier_proxy import test_external_classifier
     try:
-        code, reachable, msg = test_external_classifier(args.endpoint, args.api_key)
+        code, reachable, msg = test_external_classifier(args.endpoint, resolve_api_key(args))
         if reachable:
             print(f"✅ {msg}")
         else:
@@ -214,7 +236,8 @@ def build_parser():
 
     clf_p = subparsers.add_parser("classifier", help="Tester la connexion à un classifieur externe")
     clf_p.add_argument("--endpoint", required=True, help="URL de l'endpoint du classifieur")
-    clf_p.add_argument("--api-key", default="", help="Clé API / Bearer Token optionnel")
+    clf_p.add_argument("--api-key", default="", help="[Déprécié] Clé API / Bearer Token — préférez QUICK_PICK_API_KEY ou --api-key-stdin")
+    clf_p.add_argument("--api-key-stdin", action="store_true", help="Lire la clé API depuis stdin (une ligne)")
     clf_p.set_defaults(func=handle_classifier)
 
     return parser

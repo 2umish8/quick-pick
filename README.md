@@ -71,6 +71,8 @@ Vérification rapide : `docker compose ps` doit afficher `(healthy)`, `curl -H "
 | `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS` | (vide) | Liste optionnelle de noms d'hôtes autorisés pour le proxy IA, séparés par des virgules (ex : `api.openai.com`). Si renseignée, tout endpoint dont l'hôte n'est pas listé est refusé |
 | `QUICK_PICK_TOKEN` | (vide) | Jeton d'authentification de l'API (`Authorization: Bearer <jeton>` ou `X-Quick-Pick-Token: <jeton>`). Obligatoire si le serveur écoute sur une adresse non locale |
 | `QUICK_PICK_ALLOWED_HOSTS` | (vide) | Noms d'hôtes supplémentaires acceptés dans l'en-tête `Host`, séparés par des virgules (le serveur accepte toujours `localhost`, `127.0.0.1` et `::1`) |
+| `QUICK_PICK_API_KEY` | *(vide)* | Clé API utilisée par `deck_cli.py classifier` quand `--api-key-stdin` n'est pas fourni |
+| `QUICK_PICK_CSP_CONNECT_SRC` | *(vide)* | Origines supplémentaires autorisées par la CSP `connect-src`, séparées par des espaces (ex: `http://localhost:11434`) |
 
 > **Note :** si un en-tête `Origin` est présent, il doit correspondre exactement à l'en-tête `Host` de la requête (même hôte et même port) ; derrière un reverse-proxy, transmettez l'en-tête `Host` d'origine et ajoutez le nom public à `QUICK_PICK_ALLOWED_HOSTS`.
 
@@ -83,11 +85,33 @@ Quick-Pick n'impose aucun modèle payant ou propriétaire. Cliquez sur l'icône 
 1. **Protocole OpenAI / Ollama / Groq** :
    - **Base URL** : `https://api.openai.com/v1`, `http://localhost:11434/v1`, ou `https://api.groq.com/openai/v1`
    - **Modèle** : `gpt-4o-mini`, `llama3.2`, `mistral`, etc.
-   - **Clé API** : Votre clé privée (conservée uniquement dans le `localStorage` de votre navigateur).
+   - **Clé API** : votre clé privée.
 2. **Webhook / API Custom** :
    - Renseignez l'URL de votre endpoint de scoring interne recevant le payload `{ id, title, description, bullets, candidate_actions }`.
 
 > **LLM local (Ollama) :** les endpoints privés et locaux sont bloqués par défaut. Pour utiliser Ollama ou un modèle local, démarrez le serveur avec `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. En Docker, le conteneur ne peut pas joindre `127.0.0.1` de l'hôte : utilisez `host.docker.internal` comme hôte d'endpoint (ex : `http://host.docker.internal:11434/v1`) avec `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. Sous Linux, décommentez le bloc `extra_hosts` du `docker-compose.yml` pour résoudre `host.docker.internal` via `host-gateway`. Pour restreindre davantage le proxy, renseignez `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS` (ex : `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS=api.openai.com`).
+
+### 🔐 Où vit votre clé API
+
+La clé n'est **jamais** écrite sur le disque par le serveur et n'est envoyée à aucun service tiers par Quick-Pick. Deux emplacements possibles, choisis dans les réglages :
+
+| Choix | Stockage | Durée de vie |
+|---|---|---|
+| Par défaut | `sessionStorage` du navigateur | Effacée à la fermeture de l'onglet |
+| « Mémoriser sur cet appareil » | `localStorage` du navigateur | Persiste, jusqu'au bouton **Oublier la clé** |
+
+Une clé déjà enregistrée dans `localStorage` par une version antérieure reste utilisable telle quelle : elle est signalée comme mémorisée dans la modale, avec le bouton pour l'oublier. Aucun réglage existant n'est écrasé silencieusement.
+
+### 📡 Deux modes d'appel du fournisseur
+
+| Mode | Quand | Où part la clé |
+|---|---|---|
+| **Via le serveur** (par défaut) | Toujours disponible | Elle **transite par le serveur quick-pick** |
+| **Appel direct depuis le navigateur** | Option dans les réglages, API compatibles OpenAI uniquement | Elle reste dans le navigateur, le serveur ne la voit jamais |
+
+> ⚠️ **Mode proxy (défaut)** : la clé est transmise au fournisseur *par* le serveur quick-pick. Sur une instance partagée, l'opérateur du serveur peut la voir dans les journaux ou en mémoire de processus. Utilisez le mode direct, ou une instance auto-hébergée, si ce n'est pas acceptable.
+
+> ⚠️ **Mode direct** : réservé aux API compatibles OpenAI qui **autorisent les appels CORS** depuis l'origine de l'application (OpenAI, Groq, OpenRouter le font ; Ollama et vLLM selon leur configuration). L'en-tête `connect-src` de la CSP n'autorise par défaut que ces fournisseurs connus : pour un fournisseur auto-hébergé, ajoutez son origine via `QUICK_PICK_CSP_CONNECT_SRC` puis redémarrez le serveur. Les webhooks custom n'ont pas de contrat CORS : ils passent toujours par le serveur.
 
 ---
 
@@ -149,7 +173,13 @@ python3 deck_cli.py reset sprint-42
 
 # 6. Supprimer un deck
 python3 deck_cli.py delete sprint-42
+
+# 7. Tester un classifieur externe (la clé ne doit pas passer en argument)
+echo "$MY_KEY" | python3 deck_cli.py classifier --endpoint https://api.openai.com/v1 --api-key-stdin
+QUICK_PICK_API_KEY="$MY_KEY" python3 deck_cli.py classifier --endpoint https://api.openai.com/v1
 ```
+
+> `--api-key` reste accepté pour compatibilité mais affiche un avertissement : la clé est visible dans `ps` et dans l'historique du shell. Préférez `--api-key-stdin` ou `QUICK_PICK_API_KEY`.
 
 ---
 
@@ -197,7 +227,8 @@ Chaque deck est un document JSON autonome :
 
 Quick-Pick est conçu comme une application mono-utilisateur ou d'équipe interne :
 - Pour une exposition publique sur Internet, placez-le derrière un reverse-proxy avec authentification (Caddy avec Basic Auth, Traefik, Authelia, Cloudflare Access ou réseau privé Tailscale).
-- En-têtes de sécurité intégrés par défaut (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`).
+- En-têtes de sécurité intégrés par défaut sur toutes les réponses (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, une `Content-Security-Policy` stricte sans script ni style inline, et une `Permissions-Policy` qui coupe caméra, micro, géolocalisation, etc.).
+- Aucun script ni style inline dans l'interface : la CSP est stricte (`script-src 'self'`, `style-src 'self'`, `frame-ancestors 'none'`). Les origines autorisées par `connect-src` au-delà de `'self'` sont les fournisseurs connus, plus celles que vous déclarez via `QUICK_PICK_CSP_CONNECT_SRC`.
 - Protection contre l'exfiltration de métadonnées cloud (AWS/GCP) et limitation de taille de payload (2 Mo).
 - Durcissement intégré : le proxy IA refuse par défaut les adresses privées/locales et ne suit jamais les redirections ; le serveur vérifie l'en-tête `Host`, exige `Content-Type: application/json` sur les requêtes POST et contrôle l'en-tête `Origin`. Si le serveur écoute sur une adresse non locale (`QUICK_PICK_HOST=0.0.0.0`, Docker), un `QUICK_PICK_TOKEN` est exigé au démarrage et chaque appel `/api/*` doit le présenter. Le jeton ne transite jamais par la chaîne de requête : passez-le dans le fragment d'URL (`http://localhost:8791/#token=<jeton>`, conservé pour la session de l'onglet ; `&remember=1` pour le persister dans le `localStorage` sur une machine de confiance) ou saisissez-le à l'invite.
 - Sur les réseaux utilisant un DNS « fake-IP » (`198.18.0.0/15`, par ex. certains VPN/proxys/bacs à sable comme les modes Clash/Surge/TUN), les noms d'hôtes d'API publiques résolvent vers des adresses non globales et sont donc refusés par défaut. Contournement : désactivez le fake-IP pour ces domaines / utilisez un vrai DNS, ou (en connaissance de cause) combinez `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1` avec `QUICK_PICK_CLASSIFIER_ALLOWED_HOSTS=api.openai.com` pour restreindre les cibles.
@@ -209,6 +240,7 @@ Quick-Pick est conçu comme une application mono-utilisateur ou d'équipe intern
 ```bash
 PYTHONPATH=. python3 -m unittest discover -s tests
 ruff check .                                        # optionnel : pip install -e ".[dev]"
+node --test tests/js/*.test.mjs                      # front-end (classifieur, XSS, timeout)
 ```
 
 Les mêmes vérifications tournent dans la CI à chaque pull request.

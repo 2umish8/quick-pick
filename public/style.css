@@ -19,6 +19,11 @@
   --radius-btn: 10px;
 }
 
+/* The hidden attribute is authoritative: CSP forbids inline style attributes. */
+[hidden] {
+  display: none !important;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -340,6 +345,7 @@ main.stage-shell {
 }
 .settings-btn {
   padding: 8px 16px;
+  min-height: 44px;
   border-radius: var(--radius-btn);
   font-size: 13px;
   font-weight: 600;

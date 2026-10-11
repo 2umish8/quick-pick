@@ -41,17 +41,17 @@ function hideErrorBanner() {
 
 function switchView(view) {
   state.currentView = view;
-  dom.viewDecks.style.display = view === "decks" ? "block" : "none";
-  dom.viewGame.style.display = view === "game" ? "flex" : "none";
-  dom.viewSummary.style.display = view === "summary" ? "block" : "none";
-  dom.headerPill.style.display = view === "decks" ? "none" : "inline-block";
-  dom.progressPill.style.display = view === "game" ? "inline-flex" : "none";
+  dom.viewDecks.hidden = view !== "decks";
+  dom.viewGame.hidden = view !== "game";
+  dom.viewSummary.hidden = view !== "summary";
+  dom.headerPill.hidden = view === "decks";
+  dom.progressPill.hidden = view !== "game";
   syncUndoVisibility();
 }
 
 function syncUndoVisibility() {
   const canUndo = Boolean(state.deckData?.can_undo);
-  dom.headerUndoBtn.style.display = (state.currentView === "game" && canUndo) ? "inline-flex" : "none";
+  dom.headerUndoBtn.hidden = !(state.currentView === "game" && canUndo);
 }
 
 async function loadDecks() {

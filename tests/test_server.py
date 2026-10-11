@@ -8,6 +8,7 @@ import threading
 import unittest
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
+from unittest.mock import patch
 
 import server
 
@@ -345,6 +346,60 @@ class QuickPickHttpTests(unittest.TestCase):
         status, payload = self._request("POST", "/api/classifier/predict", "[]")
         self.assertEqual(status, 400)
         self.assertEqual(payload["error"], "invalid_json")
+
+
+class SecurityHeaderTests(unittest.TestCase):
+    """Security headers served on static pages and on the API."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.QuickPickHandler)
+        cls.port = cls.httpd.server_address[1]
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.thread.join(timeout=5)
+
+    def get(self, path):
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            conn.request("GET", path)
+            response = conn.getresponse()
+            response.read()
+            return response
+        finally:
+            conn.close()
+
+    def test_csp_and_permissions_policy_on_every_response(self):
+        for path in ("/", "/index.html", "/api/health", "/api/unknown-route"):
+            with self.subTest(path=path):
+                response = self.get(path)
+                csp = response.getheader("Content-Security-Policy") or ""
+                permissions = response.getheader("Permissions-Policy") or ""
+                self.assertIn("default-src 'self'", csp)
+                self.assertIn("script-src 'self'", csp)
+                self.assertIn("style-src 'self'", csp)
+                self.assertIn("object-src 'none'", csp)
+                self.assertIn("frame-ancestors 'none'", csp)
+                self.assertNotIn("unsafe-inline", csp)
+                self.assertNotIn("unsafe-eval", csp)
+                self.assertIn("camera=()", permissions)
+                self.assertIn("geolocation=()", permissions)
+                self.assertIn("microphone=()", permissions)
+                # Historical headers stay in place.
+                self.assertEqual(response.getheader("X-Content-Type-Options"), "nosniff")
+                self.assertEqual(response.getheader("X-Frame-Options"), "DENY")
+
+    def test_connect_src_covers_direct_mode_and_accepts_extra_origins(self):
+        csp = server.build_content_security_policy()
+        self.assertIn("connect-src 'self' https://api.openai.com", csp)
+        with patch.dict(os.environ, {"QUICK_PICK_CSP_CONNECT_SRC": "http://localhost:11434"}):
+            csp = server.build_content_security_policy()
+        self.assertIn("http://localhost:11434", csp)
 
 
 if __name__ == "__main__":
