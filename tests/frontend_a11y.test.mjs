@@ -137,3 +137,12 @@ test("a global :focus-visible ring exists and no stylesheet resets outlines", ()
     assert.ok(!/outline:\s*none/.test(read(file)), `${file} still disables outlines`);
   }
 });
+
+test("decision actions are announced as a labelled group with keyboard shortcuts", () => {
+  assert.match(read("index.html"), /id="kinetic-dock" role="group" aria-label="Décider pour cette carte"/);
+  const appJs = read("app.js");
+  assert.match(appJs, /aria-keyshortcuts=/);
+  assert.match(appJs, /DIRECTION_SHORTCUTS/);
+  // The dock is rebuilt after every decision: focus must follow.
+  assert.match(appJs, /buttons\[Math\.min\(focusedIndex, buttons\.length - 1\)\]\.focus\(\)/);
+});
