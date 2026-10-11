@@ -150,7 +150,7 @@ def create_deck(title, items, template="triage", deck_id=None):
         raise DeckError("Titre de deck obligatoire")
     if len(clean_title) > MAX_DECK_TITLE_LENGTH:
         raise DeckError(f"Titre trop long (max {MAX_DECK_TITLE_LENGTH} caractères)")
-    if template not in ACTION_TEMPLATES:
+    if not isinstance(template, str) or template not in ACTION_TEMPLATES:
         raise DeckError(f"Modèle d'actions inconnu : {template!r}")
     if not isinstance(items, list):
         raise DeckError("La liste des cartes doit être un tableau de lignes")

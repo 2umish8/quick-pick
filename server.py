@@ -350,18 +350,19 @@ class QuickPickHandler(BaseHTTPRequestHandler):
             return self.send_json(404, {"error": "action_inconnue"})
 
         if len(p) == 2 and p[0] == "api" and p[1] == "decks":
-            try:
-                deck = create_deck(
-                    title=payload.get("title"),
-                    items=payload.get("items"),
-                    template=payload.get("template") or "triage",
-                    deck_id=payload.get("id"),
-                )
-            except DeckExistsError as err:
-                return self.send_json(409, {"error": str(err)})
-            except DeckError as err:
-                return self.send_json(400, {"error": str(err)})
+            # Under STATE_LOCK so the exists-check and the write cannot race another request.
             with STATE_LOCK:
+                try:
+                    deck = create_deck(
+                        title=payload.get("title"),
+                        items=payload.get("items"),
+                        template=payload.get("template") or "triage",
+                        deck_id=payload.get("id"),
+                    )
+                except DeckExistsError as err:
+                    return self.send_json(409, {"error": str(err)})
+                except DeckError as err:
+                    return self.send_json(400, {"error": str(err)})
                 return self.send_json(201, {"ok": True, "deck_id": deck["id"], "deck": find_deck_state(deck)})
 
         if len(p) < 4 or p[0] != "api" or p[1] != "decks": return self.send_json(404, {"error": "not_found"})

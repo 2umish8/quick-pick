@@ -11,8 +11,6 @@ from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from unittest.mock import patch
 
-from http.server import ThreadingHTTPServer
-
 import deck_store
 import server
 from deck_store import DeckError, DeckExistsError

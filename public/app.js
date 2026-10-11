@@ -244,10 +244,11 @@ function buildMarkdownRecap(summary, labelById) {
     "",
     "## Détail des décisions",
   ];
-  for (const entry of summary.entries || []) {
-    const label = labelById[entry.chosen_action] || entry.action_label || entry.chosen_action;
-    const comment = entry.comment ? ` — *« ${entry.comment} »*` : "";
-    lines.push(`- [${label}] **${entry.title}**${comment}`);
+  // Plain-text Markdown for the clipboard (never injected as HTML), so no HTML escaping here.
+  for (const decision of summary.entries || []) {
+    const label = labelById[decision.chosen_action] || decision.action_label || decision.chosen_action;
+    const comment = decision.comment ? ` — *« ${decision.comment} »*` : "";
+    lines.push(`- [${label}] **${decision.title}**${comment}`);
   }
   return lines.join("\n");
 }
