@@ -109,6 +109,14 @@
         <input type="password" id="cfg-api-key" class="settings-input" placeholder="Optionnel si local ou sans authentification" autocomplete="off" />
       </div>
       <div class="settings-field toggle-field">
+        <label class="settings-toggle-label" for="cfg-remember">
+          <input type="checkbox" id="cfg-remember" class="settings-checkbox" />
+          <span>Mémoriser la clé sur cet appareil</span>
+        </label>
+        <p class="settings-hint" id="key-storage-note"></p>
+        <button class="settings-btn secondary" id="forget-key-btn" type="button" hidden>Oublier la clé</button>
+      </div>
+      <div class="settings-field toggle-field">
         <label class="settings-toggle-label" for="cfg-enabled">
           <input type="checkbox" id="cfg-enabled" class="settings-checkbox" />
           <span>Activer les suggestions IA sur les cartes</span>

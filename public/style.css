@@ -345,6 +345,7 @@ main.stage-shell {
 }
 .settings-btn {
   padding: 8px 16px;
+  min-height: 44px;
   border-radius: var(--radius-btn);
   font-size: 13px;
   font-weight: 600;
