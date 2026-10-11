@@ -7,7 +7,7 @@
 
 ## ✨ Points Forts
 
-* **Zéro Dépendance** : 100% Python standard library (`server.py`). Aucun `pip install`, aucun bundler, démarre instantanément.
+* **Zéro Dépendance** : 100% Python standard library (`server.py`). Aucun bundler, démarre instantanément (installation par `pip` optionnelle).
 * **Mobile-First & Clavier Desktop** : Swipe tactile physique fluide (`passive: false`) sur smartphone, flèches directionnelles et touches dédiées (`a`/`d`/`w`) sur desktop.
 * **Anti-Fork & BYOK Intégré** : Support natif universel des APIs OpenAI-compatibles (OpenAI `gpt-4o-mini`, Ollama local `llama3.2`, Groq, OpenRouter) et des webhooks de scoring custom.
 * **Persistance Simple & Propre** : Decks stockés en fichiers JSON lisibles et manipulables par scripts ou agents IA (`deck_cli.py`).
@@ -26,7 +26,18 @@ python3 server.py
 ```
 👉 Ouvrez votre navigateur sur **`http://localhost:8791`**.
 
-### Option B : Avec Docker Compose (Recommandé en Self-Host)
+### Option B : Installation par pip
+
+```bash
+pip install quick-pick
+quick-pick              # serveur web sur http://localhost:8791
+quick-pick-cli list     # CLI de gestion des decks
+```
+
+L'installation embarque le front (`public/`) et les decks d'exemple (`examples/`). Le dépôt reste
+utilisable tel quel : `python3 server.py` fonctionne toujours depuis un clone.
+
+### Option C : Avec Docker Compose (Recommandé en Self-Host)
 
 ```bash
 # Choisir un jeton d'API (obligatoire : le conteneur écoute sur 0.0.0.0)

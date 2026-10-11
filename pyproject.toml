@@ -24,6 +24,17 @@ dev = [
 quick-pick = "server:main"
 quick-pick-cli = "deck_cli:main"
 
+[tool.setuptools]
+# Flat layout: the modules are top-level, so discovery must be explicit.
+py-modules = ["classifier_proxy", "deck_cli", "deck_store", "deck_summary", "server"]
+# public/ and examples/ are shipped as top-level packages: server.py resolves
+# its assets from its own directory (site-packages when installed).
+packages = ["public", "examples"]
+
+[tool.setuptools.package-data]
+public = ["*.html", "*.css", "*.js", "*.svg", "*.ico", "*.png"]
+examples = ["decks/*.json"]
+
 [tool.ruff]
 line-length = 160
 exclude = ["build", "dist", ".venv", "data"]
