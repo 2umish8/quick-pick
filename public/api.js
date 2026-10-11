@@ -155,6 +155,13 @@ export function fetchDecks() {
   return request("/api/decks");
 }
 
+export function createDeck(draft) {
+  return request("/api/decks", {
+    method: "POST",
+    body: JSON.stringify(draft),
+  });
+}
+
 export function fetchDeckState(deckId) {
   return request(`/api/decks/${encodeURIComponent(deckId)}`);
 }

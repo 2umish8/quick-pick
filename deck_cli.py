@@ -5,6 +5,7 @@ import json
 import os
 import sys
 from deck_store import (
+    ACTION_TEMPLATES,
     DeckError,
     delete_deck,
     find_deck_state,
@@ -21,23 +22,6 @@ LEGACY_API_KEY_WARNING = (
     f"Avertissement : --api-key expose la clé dans ps et l'historique du shell. "
     f"Préférez la variable {API_KEY_ENV_VAR} ou --api-key-stdin."
 )
-
-ACTION_TEMPLATES = {
-    "triage": [
-        {"id": "approve", "label": "Conserver / Valider", "direction": "east", "key": "d", "color": "success"},
-        {"id": "reject", "label": "Élaguer / Rejeter", "direction": "west", "key": "a", "color": "danger"},
-        {"id": "review", "label": "À revoir / Modifier", "direction": "north", "key": "w", "color": "warning"},
-    ],
-    "binary": [
-        {"id": "approve", "label": "Oui / Valider", "direction": "east", "key": "d", "color": "success"},
-        {"id": "reject", "label": "Non / Rejeter", "direction": "west", "key": "a", "color": "danger"},
-    ],
-    "priority": [
-        {"id": "now", "label": "Immédiat", "direction": "east", "key": "d", "color": "success"},
-        {"id": "drop", "label": "Ignorer", "direction": "west", "key": "a", "color": "danger"},
-        {"id": "later", "label": "Plus tard", "direction": "north", "key": "w", "color": "warning"},
-    ],
-}
 
 
 def build_deck_payload(deck_id, title, description, category, template_name, items, guidelines="", custom_actions=None):

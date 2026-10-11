@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests unitaires et de non-régression pour quick-pick server."""
+import http.client
 import json
 import os
 import shutil
@@ -10,7 +11,9 @@ from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from unittest.mock import patch
 
+import deck_store
 import server
+from deck_store import DeckError, DeckExistsError
 
 
 class QuickPickServerTests(unittest.TestCase):
@@ -400,6 +403,143 @@ class SecurityHeaderTests(unittest.TestCase):
         with patch.dict(os.environ, {"QUICK_PICK_CSP_CONNECT_SRC": "http://localhost:11434"}):
             csp = server.build_content_security_policy()
         self.assertIn("http://localhost:11434", csp)
+
+
+class DeckCreationTests(unittest.TestCase):
+    """Validation pure (deck_store.create_deck), sans HTTP."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.decks_dir = os.path.join(self.temp_dir, "decks")
+        os.makedirs(self.decks_dir, exist_ok=True)
+        self.original_decks_dir = deck_store.DECKS_DIR
+        deck_store.set_decks_dir(self.decks_dir)
+
+    def tearDown(self):
+        deck_store.set_decks_dir(self.original_decks_dir)
+        shutil.rmtree(self.temp_dir)
+
+    def test_create_deck_builds_persisted_json_deck(self):
+        deck = deck_store.create_deck(
+            title="  Backlog Q4  ",
+            items=["Migrer vers Postgres", "  ", "Supprimer le legacy", ""],
+            template="priority",
+        )
+        self.assertEqual(deck["id"], "backlog-q4")
+        self.assertEqual(deck["title"], "Backlog Q4")
+        self.assertEqual(deck["category"], "GÉNÉRAL")
+        # Lignes vides ignorées, cartes ordonnées et identifiées
+        self.assertEqual([it["title"] for it in deck["items"]], ["Migrer vers Postgres", "Supprimer le legacy"])
+        self.assertEqual([it["id"] for it in deck["items"]], ["item-1", "item-2"])
+        self.assertTrue(all(it["status"] == "pending" and it["chosen_action"] is None for it in deck["items"]))
+        # Actions du modèle demandé, cohérentes avec deck_cli
+        self.assertEqual(deck["default_actions"], deck_store.ACTION_TEMPLATES["priority"])
+        # Persistance réelle sur disque, relisible par le store
+        self.assertEqual(deck_store.load_deck("backlog-q4"), deck)
+
+    def test_create_deck_rejects_invalid_input(self):
+        cases = [
+            {"title": "", "items": ["a"]},
+            {"title": "   ", "items": ["a"]},
+            {"title": "T" * (deck_store.MAX_DECK_TITLE_LENGTH + 1), "items": ["a"]},
+            {"title": "Titre", "items": "pas une liste"},
+            {"title": "Titre", "items": []},
+            {"title": "Titre", "items": ["  ", ""]},
+            {"title": "Titre", "items": ["a" * (deck_store.MAX_ITEM_TITLE_LENGTH + 1)]},
+            {"title": "Titre", "items": ["a"] * (deck_store.MAX_DECK_ITEMS + 1)},
+            {"title": "Titre", "items": ["a"], "template": "inconnu"},
+            {"title": "Titre", "items": ["a"], "deck_id": "../traversal"},
+            {"title": "Titre", "items": ["a"], "deck_id": "deck with spaces"},
+        ]
+        for case in cases:
+            with self.subTest(case=case.get("template") or case["items"][:1]), self.assertRaises(DeckError):
+                deck_store.create_deck(**case)
+        self.assertEqual(os.listdir(self.decks_dir), [])
+
+    def test_create_deck_never_overwrites_existing_deck(self):
+        deck_store.create_deck(title="Sprint", items=["a"], deck_id="sprint")
+        with self.assertRaises(DeckExistsError):
+            deck_store.create_deck(title="Autre sprint", items=["b"], deck_id="sprint")
+        self.assertEqual([it["title"] for it in deck_store.load_deck("sprint")["items"]], ["a"])
+
+    def test_create_deck_generates_unique_ids(self):
+        self.assertEqual(deck_store.create_deck(title="Revue de PR", items=["a"])["id"], "revue-de-pr")
+        self.assertEqual(deck_store.create_deck(title="Revue de PR !", items=["a"])["id"], "revue-de-pr-2")
+        self.assertEqual(deck_store.create_deck(title="***", items=["a"])["id"], "deck")
+
+
+class DeckCreationApiTests(unittest.TestCase):
+    """Route POST /api/decks via un vrai serveur HTTP éphémère."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.decks_dir = os.path.join(self.temp_dir, "decks")
+        os.makedirs(self.decks_dir, exist_ok=True)
+        self.original_decks_dir = deck_store.DECKS_DIR
+        deck_store.set_decks_dir(self.decks_dir)
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.QuickPickHandler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        deck_store.set_decks_dir(self.original_decks_dir)
+        shutil.rmtree(self.temp_dir)
+
+    def post(self, path, payload):
+        conn = http.client.HTTPConnection("127.0.0.1", self.httpd.server_address[1], timeout=5)
+        try:
+            body = json.dumps(payload).encode("utf-8")
+            conn.request("POST", path, body=body, headers={"Content-Type": "application/json"})
+            response = conn.getresponse()
+            return response.status, json.loads(response.read().decode("utf-8") or "{}")
+        finally:
+            conn.close()
+
+    def test_post_decks_creates_and_returns_playable_state(self):
+        status, data = self.post("/api/decks", {
+            "title": "Nettoyage deps",
+            "template": "binary",
+            "items": ["Retirer lodash", "Garder zod"],
+        })
+        self.assertEqual(status, 201)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["deck_id"], "nettoyage-deps")
+        # L'état renvoyé est directement jouable par le front
+        state = data["deck"]
+        self.assertEqual(state["id"], "nettoyage-deps")
+        self.assertFalse(state["is_completed"])
+        self.assertEqual(state["current_item"]["title"], "Retirer lodash")
+        self.assertEqual([a["id"] for a in state["current_item"]["actions"]], ["approve", "reject"])
+        self.assertEqual(state["pending_count"], 2)
+        # Le deck apparaît dans la liste et l'état est rechargable par l'API
+        self.assertEqual([d["id"] for d in deck_store.list_available_decks()], ["nettoyage-deps"])
+        self.assertEqual(self.post("/api/decks/nettoyage-deps/undo", {})[0], 409)  # rien à annuler
+
+    def test_post_decks_defaults_to_triage_template(self):
+        status, data = self.post("/api/decks", {"title": "Audit", "items": ["a"]})
+        self.assertEqual(status, 201)
+        self.assertEqual(data["deck"]["current_item"]["actions"], deck_store.ACTION_TEMPLATES["triage"])
+
+    def test_post_decks_4xx_on_invalid_input(self):
+        for payload in (
+            {"items": ["a"]},
+            {"title": "Titre", "items": []},
+            {"title": "Titre", "items": ["a"], "template": "nope"},
+            {"title": "Titre", "items": ["a"], "id": "../evil"},
+        ):
+            with self.subTest(payload=payload):
+                status, body = self.post("/api/decks", payload)
+                self.assertEqual(status, 400)
+                self.assertTrue(body.get("error"))
+        self.assertEqual(os.listdir(self.decks_dir), [])
+
+    def test_post_decks_409_on_existing_id(self):
+        self.assertEqual(self.post("/api/decks", {"title": "A", "items": ["x"], "id": "same"})[0], 201)
+        status, body = self.post("/api/decks", {"title": "B", "items": ["y"], "id": "same"})
+        self.assertEqual(status, 409)
+        self.assertIn("existe déjà", body["error"])
+        self.assertEqual([it["title"] for it in deck_store.load_deck("same")["items"]], ["x"])
 
 
 if __name__ == "__main__":

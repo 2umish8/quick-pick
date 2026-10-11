@@ -47,6 +47,29 @@
       <p>Sélectionne une pile pour lancer le flux de décisions.</p>
     </div>
     <div class="deck-list" id="deck-list-container"></div>
+    <button type="button" class="deck-create-toggle" id="deck-create-toggle" aria-expanded="false" aria-controls="deck-create-form">Créer un deck</button>
+    <form class="deck-create-form" id="deck-create-form" hidden>
+      <h3 class="deck-create-head">Nouveau deck</h3>
+      <div class="deck-create-field">
+        <label class="deck-create-label" for="deck-create-title-input">Titre du deck</label>
+        <input type="text" id="deck-create-title-input" class="deck-create-input" maxlength="120" required autocomplete="off" placeholder="ex: Tri du backlog Q4" />
+      </div>
+      <div class="deck-create-field">
+        <label class="deck-create-label" for="deck-create-template-input">Modèle de décision</label>
+        <select id="deck-create-template-input" class="deck-create-input">
+          <option value="triage">Triage — Conserver / Élaguer / À revoir</option>
+          <option value="binary">Oui / Non — Valider / Rejeter</option>
+          <option value="priority">Priorité — Immédiat / Plus tard / Ignorer</option>
+        </select>
+      </div>
+      <div class="deck-create-field">
+        <label class="deck-create-label" for="deck-create-items-input">Cartes à trancher</label>
+        <textarea id="deck-create-items-input" class="deck-create-input deck-create-textarea" rows="7" required placeholder="Une carte par ligne&#10;ex: Migrer la base vers Postgres" aria-describedby="deck-create-items-hint"></textarea>
+        <p class="deck-create-hint" id="deck-create-items-hint">Une ligne = une carte. 200 cartes maximum.</p>
+      </div>
+      <p class="deck-create-error" id="deck-create-error" role="alert"></p>
+      <button type="submit" class="deck-create-submit" id="deck-create-submit">Créer et commencer à trier</button>
+    </form>
   </section>
 
   <!-- Vue Jeu : Stack réelle carrée -->
