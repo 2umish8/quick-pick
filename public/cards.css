@@ -42,11 +42,15 @@
   filter: brightness(0.84);
 }
 
-/* Carte active au-dessus */
-.active-card, .active-card * {
-  touch-action: none !important;
+/* Carte active au-dessus : swipe sur la carte, scroll vertical natif dans le contenu */
+.active-card {
+  touch-action: none;
   -webkit-user-select: none;
   user-select: none;
+}
+.active-card .card-inner,
+.active-card .card-inner * {
+  touch-action: pan-y !important;
 }
 .active-card {
   cursor: grab;
@@ -62,6 +66,7 @@
   flex-direction: column;
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .card-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .badge-tag {
@@ -80,6 +85,16 @@
 .card-description {
   font-size: 12.5px; line-height: 1.4; color: #94A3B8; margin-bottom: 12px;
 }
+/* Markdown natif : mêmes tokens, pas de nouveau composant */
+.card-description a, .bullet-item a { color: var(--info); text-decoration: underline; }
+.card-description strong, .bullet-item strong { color: var(--text); font-weight: 700; }
+.card-description em, .bullet-item em { color: inherit; }
+.md-code {
+  font-family: ui-monospace, monospace; font-size: 0.92em;
+  background: rgba(255, 255, 255, 0.08); padding: 1px 5px; border-radius: 4px;
+}
+.md-h { color: var(--text); font-weight: 800; }
+.md-quote { border-left: 2px solid var(--border-focus); padding-left: 8px; color: var(--muted); }
 .bullet-list {
   list-style: none; display: flex; flex-direction: column; gap: 8px; margin-top: auto;
 }

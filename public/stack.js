@@ -32,8 +32,8 @@ export function renderStack(container, state, onDecide) {
     cardEl.style.zIndex = `${10 - i}`;
 
     const badges = (item.badges || []).map(b => `<span class="badge-tag ${escapeHtml(b.variant || 'neutral')}">${escapeHtml(b.label)}</span>`).join("");
-    const bullets = (item.bullets || []).map(b => `<li class="bullet-item">${escapeHtml(b)}</li>`).join("");
-    const descriptionHtml = item.description ? `<p class="card-description">${escapeHtml(item.description)}</p>` : "";
+    const bullets = (item.bullets || []).map(b => `<li class="bullet-item">${hasMarkdown(b) ? renderInlineMarkdown(b) : escapeHtml(b)}</li>`).join("");
+    const descriptionHtml = item.description ? `<div class="card-description">${hasMarkdown(item.description) ? renderBlockMarkdown(item.description) : escapeHtml(item.description)}</div>` : "";
 
     cardEl.innerHTML = `
       <div class="card-inner">
@@ -67,6 +67,8 @@ export function attachClassifierSuggestion(container, itemId, prediction) {
 
 function bindDragAndSwipe(cardEl, item, onDecide) {
   let isDown = false, startX = 0, startY = 0, currentX = 0, currentY = 0;
+  let gestureMode = null;
+  const innerEl = () => cardEl.querySelector(".card-inner");
   const edgeIndicators = {
     west: document.querySelector(".edge-indicator.west"),
     east: document.querySelector(".edge-indicator.east"),
@@ -82,6 +84,7 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
 
   const onStart = (clientX, clientY) => {
     isDown = true;
+    gestureMode = null;
     startX = clientX;
     startY = clientY;
     currentX = 0;
@@ -123,13 +126,32 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
     }
   };
 
-  // Tactile mobile : passive=false + preventDefault garantit que la carte suit le doigt
+  // Tactile mobile : swipe horizontal = décision, scroll vertical natif = lecture
   cardEl.addEventListener("touchstart", e => {
     if (e.touches.length === 1) onStart(e.touches[0].clientX, e.touches[0].clientY);
   }, { passive: true });
 
   cardEl.addEventListener("touchmove", e => {
     if (!isDown || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (gestureMode === null && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
+      const inner = innerEl();
+      const canScroll = inner && inner.scrollHeight > inner.clientHeight + 4;
+      if (canScroll && Math.abs(dy) > Math.abs(dx)) {
+        const atTop = inner.scrollTop <= 0;
+        const atBottom = inner.scrollTop + inner.clientHeight >= inner.scrollHeight - 1;
+        const scrollBlocked = (dy > 0 && atTop) || (dy < 0 && atBottom);
+        if (!scrollBlocked) {
+          gestureMode = "scroll";
+          isDown = false;
+          clearEdges();
+          return;
+        }
+      }
+      gestureMode = "swipe";
+    }
+    if (gestureMode === "scroll") return;
     if (e.cancelable) e.preventDefault();
     onMove(e.touches[0].clientX, e.touches[0].clientY);
   }, { passive: false });
@@ -155,3 +177,35 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
   cardEl.addEventListener("pointerup", finishMouse);
   cardEl.addEventListener("pointercancel", finishMouse);
 }
+
+function hasMarkdown(str) {
+  if (!str || typeof str !== "string") return false;
+  return /(\*\*.+?\*\*|\*[^*]+?\*|`[^`]+?`|\[.+?\]\(https?:\/\/.+?\)|^#{1,3}\s|^&gt;\s|^&gt; |> [-*] |\n)/m.test(str)
+    || /(^|\n)#{1,3}\s/.test(str) || /(^|\n)>\s/.test(str) || /(^|\n)[-*] /.test(str);
+}
+
+function inlineMarkdown(escaped) {
+  let out = escaped;
+  out = out.replace(/`([^`]+?)`/g, '<code class="md-code">$1</code>');
+  out = out.replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>");
+  out = out.replace(/(^|[^*])\*([^*]+?)\*(?![*])/g, "$1<em>$2</em>");
+  out = out.replace(/\[([^\]]+?)\]\((https?:\/\/[^)]+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  return out;
+}
+
+function renderInlineMarkdown(str) {
+  return inlineMarkdown(escapeHtml(str));
+}
+
+function renderBlockMarkdown(str) {
+  const paras = String(str).split(/\n{2,}/).map(par => {
+    let h = escapeHtml(par);
+    h = h.replace(/^(#{1,3})\s+(.+)$/m, '<span class="md-h">$2</span>');
+    h = h.replace(/^&gt;\s?(.*)$/gm, '<span class="md-quote">$1</span>');
+    h = inlineMarkdown(h);
+    h = h.replace(/\n/g, "<br>");
+    return h;
+  });
+  return paras.join("<br><br>");
+}
+
