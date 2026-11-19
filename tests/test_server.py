@@ -516,6 +516,45 @@ class DeckCreationApiTests(unittest.TestCase):
         self.assertEqual([d["id"] for d in deck_store.list_available_decks()], ["nettoyage-deps"])
         self.assertEqual(self.post("/api/decks/nettoyage-deps/undo", {})[0], 409)  # rien à annuler
 
+    def test_default_undo_reverts_the_last_decision_even_within_the_same_second(self):
+        # decided_at a une résolution d'1 s : deux décisions rapides ont le même horodatage.
+        self.assertEqual(self.post("/api/decks", {"id": "rapide", "title": "Rapide", "items": ["a", "b", "c"]})[0], 201)
+        with patch.object(server, "utc_now_iso", return_value="2026-11-19T10:00:00+00:00"):
+            self.post("/api/decks/rapide/decide", {"item_id": "item-1", "action": "approve"})
+            self.post("/api/decks/rapide/decide", {"item_id": "item-2", "action": "reject"})
+        status, state = self.post("/api/decks/rapide/undo", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(state["current_item"]["id"], "item-2")  # la dernière décision, pas la première
+        self.assertEqual([d["id"] for d in state["decided_items"]], ["item-1"])
+        # Deuxième annulation : on remonte d'un cran, jamais deux fois la même carte.
+        status, state = self.post("/api/decks/rapide/undo", {})
+        self.assertEqual(state["current_item"]["id"], "item-1")
+        self.assertEqual(state["decided_items"], [])
+
+    def test_undo_on_legacy_deck_without_decision_order_takes_the_later_card(self):
+        deck_store.save_deck("ancien", {
+            "id": "ancien", "title": "Ancien", "default_actions": deck_store.ACTION_TEMPLATES["binary"],
+            "items": [
+                {"id": "x1", "title": "X1", "status": "decided", "chosen_action": "approve", "decided_at": "2026-11-19T10:00:00+00:00"},
+                {"id": "x2", "title": "X2", "status": "decided", "chosen_action": "reject", "decided_at": "2026-11-19T10:00:00+00:00"},
+            ],
+        })
+        status, state = self.post("/api/decks/ancien/undo", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(state["current_item"]["id"], "x2")
+
+    def test_negative_content_length_is_rejected_without_hanging(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.httpd.server_address[1], timeout=5)
+        try:
+            conn.putrequest("POST", "/api/decks")
+            conn.putheader("Content-Type", "application/json")
+            conn.putheader("Content-Length", "-5")
+            conn.endheaders()
+            response = conn.getresponse()
+            self.assertEqual(response.status, 400)
+        finally:
+            conn.close()
+
     def test_post_decks_defaults_to_triage_template(self):
         status, data = self.post("/api/decks", {"title": "Audit", "items": ["a"]})
         self.assertEqual(status, 201)

@@ -195,6 +195,8 @@ from classifier_proxy import query_external_classifier, test_external_classifier
 
 class QuickPickHandler(BaseHTTPRequestHandler):
     server_version = "quick-pick/2"
+    # A client that stops sending (or lies about Content-Length) must not hold a thread forever.
+    timeout = 30
 
     def log_message(self, fmt, *args):
         line = fmt % args if args else fmt
@@ -255,6 +257,9 @@ class QuickPickHandler(BaseHTTPRequestHandler):
     def read_json_body(self):
         try:
             length = int(self.headers.get("Content-Length") or 0)
+            if length < 0:
+                # rfile.read(-n) would block until the client closes the connection.
+                return None, {"error": "invalid_json", "detail": "Content-Length invalide"}
             if length > MAX_BODY_SIZE:
                 return None, {"error": "payload_too_large", "detail": f"Max {MAX_BODY_SIZE} octets"}
             payload = json.loads((self.rfile.read(length) if length else b"{}").decode("utf-8") or "{}")
@@ -382,7 +387,9 @@ class QuickPickHandler(BaseHTTPRequestHandler):
                 if act_id not in valid: return self.send_json(400, {"error": "invalid_action", "valid": valid})
                 raw_c = payload.get("comment")
                 clean_c = raw_c.strip() if isinstance(raw_c, str) and raw_c.strip() else None
-                target.update({"status": "decided", "chosen_action": act_id, "decided_at": utc_now_iso(), "comment": clean_c})
+                next_seq = max((it.get("decided_seq") or 0 for it in items), default=0) + 1
+                target.update({"status": "decided", "chosen_action": act_id, "decided_at": utc_now_iso(),
+                               "decided_seq": next_seq, "comment": clean_c})
             elif action == "undo":
                 target_id = payload.get("item_id")
                 decided = [it for it in items if it.get("status") == "decided"]
@@ -390,10 +397,15 @@ class QuickPickHandler(BaseHTTPRequestHandler):
                 if target_id:
                     target = next((it for it in decided if it.get("id") == target_id), None)
                     if not target: return self.send_json(404, {"error": "item_not_found"})
-                    target.update({"status": "pending", "chosen_action": None, "decided_at": None, "comment": None})
                 else:
-                    decided.sort(key=lambda it: it.get("decided_at") or "", reverse=True)
-                    decided[0].update({"status": "pending", "chosen_action": None, "decided_at": None, "comment": None})
+                    # decided_at has 1 s resolution: two quick decisions tie. decided_seq breaks the tie,
+                    # and for legacy decks without it the later position in the file wins.
+                    target = max(
+                        enumerate(decided),
+                        key=lambda pair: (pair[1].get("decided_at") or "", pair[1].get("decided_seq") or 0, pair[0]),
+                    )[1]
+                target.update({"status": "pending", "chosen_action": None, "decided_at": None, "comment": None})
+                target.pop("decided_seq", None)
             elif action == "skip":
                 idx = next((i for i, it in enumerate(items) if it.get("id") == payload.get("item_id")), None)
                 if idx is None: return self.send_json(404, {"error": "item_not_found"})

@@ -7,6 +7,8 @@ import sys
 from deck_store import (
     ACTION_TEMPLATES,
     DeckError,
+    DeckExistsError,
+    deck_exists,
     delete_deck,
     find_deck_state,
     list_available_decks,
@@ -54,6 +56,9 @@ def build_deck_payload(deck_id, title, description, category, template_name, ite
 
 
 def handle_create(args):
+    # Same rule as POST /api/decks: never overwrite a deck (it may hold decisions).
+    if deck_exists(args.id):
+        raise DeckExistsError(f"Un deck nommé '{args.id}' existe déjà (supprimez-le d'abord avec 'delete')")
     if args.items_file == "-":
         raw = sys.stdin.read()
     else:

@@ -55,6 +55,21 @@ class DeckCliTests(unittest.TestCase):
         self.assertEqual(deck["id"], "cli-deck")
         self.assertEqual(len(deck["items"]), 2)
 
+    def test_handle_create_never_overwrites_an_existing_deck(self):
+        # Même règle que POST /api/decks (README) : un deck qui contient des décisions n'est jamais écrasé.
+        items_file = os.path.join(self.temp_dir, "items.json")
+        with open(items_file, "w", encoding="utf-8") as f:
+            json.dump([{"id": "c1", "title": "Carte 1"}], f)
+        argv = ["create", "--id", "garde", "--title", "Garde", "--items-file", items_file]
+        with patch("sys.stdout"):
+            deck_cli.handle_create(deck_cli.build_parser().parse_args(argv))
+        deck = deck_store.load_deck("garde")
+        deck["items"][0].update({"status": "decided", "chosen_action": "approve"})
+        deck_store.save_deck("garde", deck)
+        with self.assertRaises(deck_store.DeckExistsError):
+            deck_cli.handle_create(deck_cli.build_parser().parse_args(argv))
+        self.assertEqual(deck_store.load_deck("garde")["items"][0]["status"], "decided")
+
     def test_handle_create_validation_rejects_malformed_items(self):
         parser = deck_cli.build_parser()
         # 1. Tableau vide

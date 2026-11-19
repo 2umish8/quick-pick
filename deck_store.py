@@ -205,6 +205,7 @@ def reset_deck(deck_id):
         item["chosen_action"] = None
         item["decided_at"] = None
         item["comment"] = None
+        item.pop("decided_seq", None)
     save_deck(deck_id, deck)
     return deck
 

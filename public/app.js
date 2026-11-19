@@ -82,7 +82,7 @@ async function loadDecks() {
   `).join("")
     : `<p class="deck-list-empty">Aucun deck pour l'instant. Créez le premier ci-dessous, ou posez une liste et commencez à trier.</p>`;
   dom.deckList.querySelectorAll(".deck-item-card").forEach(el => {
-    el.addEventListener("click", () => startDeck(el.dataset.deckId));
+    el.addEventListener("click", () => openDeck(el.dataset.deckId));
   });
   switchView("decks");
 }
@@ -96,7 +96,22 @@ async function startDeck(deckId) {
   handleDeckState(deckData);
 }
 
+// Ouvre un deck depuis un clic ou un changement d'adresse : un échec se voit (bandeau + réessai)
+// au lieu d'une promesse rejetée sans bruit.
+function openDeck(deckId) {
+  return startDeck(deckId).catch(err => {
+    state.activeDeckId = null;
+    showErrorBanner(`Impossible d'ouvrir ce sujet : ${err.message}`, () => openDeck(deckId));
+  });
+}
+
+// Après un échec (ou une action ignorée), la carte déjà envolée par le swipe revient à l'écran.
+function restoreCurrentCard() {
+  if (state.deckData?.current_item) renderStack(dom.cardStack, state.deckData, onCardDecide);
+}
+
 function handleDeckState(deckData) {
+  hideErrorBanner();
   state.deckData = deckData;
   updateDrawerState(deckData);
   syncUndoVisibility();
@@ -120,12 +135,19 @@ async function loadClassifierSuggestion(item) {
 }
 
 async function onCardDecide(actionId) {
-  if (state.isProcessing || !state.deckData?.current_item) return;
+  if (!state.deckData?.current_item) return;
+  if (state.isProcessing) {
+    restoreCurrentCard(); // swipe pendant une autre requête : la carte ne doit pas rester invisible
+    return;
+  }
   state.isProcessing = true;
   const comment = dom.commentInput.value.trim() || null;
   try {
     const nextState = await postDecision(state.activeDeckId, state.deckData.current_item.id, actionId, comment);
     handleDeckState(nextState);
+  } catch (err) {
+    restoreCurrentCard();
+    showErrorBanner(`Décision non enregistrée : ${err.message}`, () => onCardDecide(actionId));
   } finally {
     state.isProcessing = false;
   }
@@ -137,6 +159,8 @@ async function onCardSkip() {
   try {
     const nextState = await postSkip(state.activeDeckId, state.deckData.current_item.id);
     handleDeckState(nextState);
+  } catch (err) {
+    showErrorBanner(`Carte non passée : ${err.message}`, onCardSkip);
   } finally {
     state.isProcessing = false;
   }
@@ -148,6 +172,8 @@ async function triggerUndo(itemId = null) {
   try {
     const nextState = await postUndo(state.activeDeckId, itemId);
     handleDeckState(nextState);
+  } catch (err) {
+    showErrorBanner(`Annulation impossible : ${err.message}`, () => triggerUndo(itemId));
   } finally {
     state.isProcessing = false;
   }
@@ -184,7 +210,13 @@ function ariaKeyShortcuts(action) {
 
 async function showSummary() {
   switchView("summary");
-  const summary = await fetchSummary(state.activeDeckId);
+  let summary;
+  try {
+    summary = await fetchSummary(state.activeDeckId);
+  } catch (err) {
+    showErrorBanner(`Impossible de charger la synthèse : ${err.message}`, showSummary);
+    return;
+  }
   // Libellés lisibles partout (jamais les ids d'actions bruts)
   const labelById = Object.fromEntries(
     (state.deckData?.decided_items || []).map(entry => [entry.chosen_action, entry.action_label])
@@ -259,6 +291,10 @@ function initKeyboard() {
     const isTyping = e.target instanceof HTMLElement
       && Boolean(e.target.closest("input, textarea, select, [contenteditable]"));
     if (isTyping || state.currentView !== "game") return;
+    // Un panneau ouvert (historique, réglages) garde ses touches : Échap le ferme, il ne passe pas la carte,
+    // et les lettres/flèches ne décident pas la carte cachée derrière.
+    if (document.getElementById("deck-drawer")?.classList.contains("open")) return;
+    if (document.getElementById("settings-modal")?.hidden === false) return;
     const isInputActive = (document.activeElement === dom.commentInput);
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && state.deckData?.can_undo) {
       e.preventDefault();
@@ -318,7 +354,10 @@ function getInitialDeckId() {
   if (hash) {
     // api.js strips token=/remember= parts at load; filter defensively here too.
     const kept = hash.split("&").filter(p => p && !p.startsWith("token=") && p !== "remember=1");
-    if (kept.length) return decodeURIComponent(kept[0]);
+    if (kept.length) {
+      // Une adresse mal encodée (#%E0%A4%A) ne doit pas faire planter tout le module au chargement.
+      try { return decodeURIComponent(kept[0]); } catch { return null; }
+    }
   }
   const params = new URLSearchParams(window.location.search);
   const deckParam = params.get("deck");
@@ -327,7 +366,7 @@ function getInitialDeckId() {
 }
 
 // Initialisation
-initDeckForm({ onCreated: (deckId) => startDeck(deckId) });
+initDeckForm({ onCreated: (deckId) => openDeck(deckId) });
 initDrawer({ onUndoItem: (itemId) => triggerUndo(itemId) });
 initSettingsModal();
 initKeyboard();
@@ -339,7 +378,7 @@ document.getElementById("logo-zone")?.addEventListener("click", loadDecks);
 window.addEventListener("hashchange", () => {
   const targetId = getInitialDeckId();
   if (targetId && targetId !== state.activeDeckId) {
-    startDeck(targetId);
+    openDeck(targetId);
   } else if (!targetId && state.currentView !== "decks") {
     loadDecks();
   }
