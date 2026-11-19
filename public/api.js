@@ -84,6 +84,8 @@ async function readErrorBody(response) {
     }
   }
   const text = await response.text();
+  // The server answers its own 401s in JSON: a non-JSON 401 comes from a proxy in front (session expired).
+  if (response.status === 401) return { error: "access_expired", detail: "Accès expiré : rechargez la page" };
   return { error: text || `Erreur serveur (${response.status})` };
 }
 
@@ -119,7 +121,9 @@ export async function request(endpoint, options = {}) {
     data = await readErrorBody(response);
   }
   if (!response.ok) {
-    throw new Error(data.detail || data.error || `Erreur serveur (${response.status})`);
+    const failure = new Error(data.detail || data.error || `Erreur serveur (${response.status})`);
+    if (data.code) failure.code = data.code;
+    throw failure;
   }
   return data;
 }
@@ -189,4 +193,19 @@ export function postSkip(deckId, itemId) {
 
 export function fetchSummary(deckId) {
   return request(`/api/decks/${encodeURIComponent(deckId)}/summary`);
+}
+
+export function postReset(deckId) {
+  return request(`/api/decks/${encodeURIComponent(deckId)}/reset`, { method: "POST", body: "{}" });
+}
+
+export function postDelete(deckId) {
+  return request(`/api/decks/${encodeURIComponent(deckId)}/delete`, { method: "POST", body: "{}" });
+}
+
+export function postItems(deckId, items) {
+  return request(`/api/decks/${encodeURIComponent(deckId)}/items`, {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
 }

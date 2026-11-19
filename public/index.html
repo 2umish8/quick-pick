@@ -55,6 +55,10 @@
         <input type="text" id="deck-create-title-input" class="deck-create-input" maxlength="120" required autocomplete="off" placeholder="ex: Tri du backlog Q4" />
       </div>
       <div class="deck-create-field">
+        <label class="deck-create-label" for="deck-create-description-input">Description (facultatif)</label>
+        <input type="text" id="deck-create-description-input" class="deck-create-input" maxlength="500" autocomplete="off" />
+      </div>
+      <div class="deck-create-field">
         <label class="deck-create-label" for="deck-create-template-input">Modèle de décision</label>
         <select id="deck-create-template-input" class="deck-create-input">
           <option value="triage">Triage — Conserver / Élaguer / À revoir</option>
@@ -65,7 +69,7 @@
       <div class="deck-create-field">
         <label class="deck-create-label" for="deck-create-items-input">Cartes à trancher</label>
         <textarea id="deck-create-items-input" class="deck-create-input deck-create-textarea" rows="7" required placeholder="Une carte par ligne&#10;ex: Migrer la base vers Postgres" aria-describedby="deck-create-items-hint"></textarea>
-        <p class="deck-create-hint" id="deck-create-items-hint">Une ligne = une carte. 200 cartes maximum.</p>
+        <p class="deck-create-hint" id="deck-create-items-hint">Une ligne = une carte. 200 cartes maximum. Détail optionnel : « titre :: détail ».</p>
       </div>
       <p class="deck-create-error" id="deck-create-error" role="alert"></p>
       <button type="submit" class="deck-create-submit" id="deck-create-submit">Créer et commencer à trier</button>

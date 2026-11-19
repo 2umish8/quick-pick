@@ -1,10 +1,11 @@
 // Module Principal Quick-Pick (SOLID SRP)
-import { fetchDecks, fetchDeckState, postDecision, postUndo, postSkip, fetchSummary } from "./api.js";
+import { fetchDecks, fetchDeckState, postDecision, postUndo, postSkip, fetchSummary, postReset, postDelete, postItems } from "./api.js";
 import { escapeHtml } from "./escape.js";
 import { renderStack, attachClassifierSuggestion } from "./stack.js";
 import { initDrawer, openDrawer, updateDrawerState } from "./deck-drawer.js";
 import { initSettingsModal, fetchItemPrediction } from "./classifier.js";
 import { initDeckForm } from "./deck-form.js";
+import { formatDecisionSummary, parseCardLine } from "./format.js";
 
 const state = { activeDeckId: null, deckData: null, isProcessing: false, currentView: "decks" };
 
@@ -55,7 +56,126 @@ function syncUndoVisibility() {
   dom.headerUndoBtn.hidden = !(state.currentView === "game" && canUndo);
 }
 
+// Two-step confirmation: one armed button at a time, back to normal after 4 s or on any list re-render.
+const CONFIRM_DELAY_MS = 4000;
+let armed = null;
+
+function disarm() {
+  if (!armed) return;
+  clearTimeout(armed.timer);
+  armed.button.textContent = armed.label;
+  armed.button.classList.remove("armed");
+  armed.note.hidden = true;
+  armed = null;
+}
+
+function arm(button, note, noteText) {
+  disarm();
+  armed = { button, note, label: button.textContent, timer: setTimeout(disarm, CONFIRM_DELAY_MS) };
+  button.textContent = "Confirmer ?";
+  button.classList.add("armed");
+  note.textContent = noteText || "";
+  note.hidden = !noteText;
+}
+
+function deckItemHtml(deck) {
+  const category = escapeHtml(deck.category || "PROJET");
+  const title = escapeHtml(deck.title);
+  const desc = escapeHtml(deck.description || "");
+  let status;
+  if (deck.invalid) status = `<span class="deck-item-badge invalid">Illisible</span>`;
+  else if (deck.is_completed) status = `<span class="deck-item-badge done">Terminé</span>`;
+  else status = `<span class="deck-item-progress">${escapeHtml(String(deck.decided))}/${escapeHtml(String(deck.total))} décidés</span>`;
+  const cardOpen = deck.invalid
+    ? `<button type="button" class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}" disabled>`
+    : `<button type="button" class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}">`;
+  const actions = deck.invalid
+    ? `<button type="button" class="deck-act danger" data-act="delete">Supprimer</button>`
+    : `<button type="button" class="deck-act" data-act="reset">Remettre à zéro</button>
+       <button type="button" class="deck-act danger" data-act="delete">Supprimer</button>
+       <button type="button" class="deck-act" data-act="add" aria-expanded="false">Ajouter des cartes</button>`;
+  const addZone = deck.invalid ? "" : `
+      <div class="deck-item-add" hidden>
+        <textarea class="deck-create-input deck-create-textarea deck-add-input" rows="4" aria-label="Cartes à ajouter" placeholder="Une carte par ligne. Détail : titre :: détail"></textarea>
+        <p class="deck-create-error deck-add-error" role="alert"></p>
+        <div class="deck-add-buttons">
+          <button type="button" class="deck-act" data-act="add-submit">Ajouter</button>
+          <button type="button" class="deck-act" data-act="add-cancel">Annuler</button>
+        </div>
+      </div>`;
+  return `
+    <div class="deck-item" data-deck-id="${escapeHtml(deck.id)}">
+      ${cardOpen}
+        <div class="deck-item-top"><span class="deck-item-category">${category}</span>${status}</div>
+        <div class="deck-item-title">${title}</div>
+        <div class="deck-item-desc">${desc}</div>
+      </button>
+      <div class="deck-item-actions">${actions}</div>
+      <p class="deck-item-note" hidden></p>${addZone}
+    </div>`;
+}
+
+async function runDeckAction(task, failureLabel) {
+  try {
+    await task();
+    await loadDecks();
+  } catch (err) {
+    showErrorBanner(`${failureLabel} : ${err.message}`);
+  }
+}
+
+async function submitAddCards(item, deckId) {
+  const input = item.querySelector(".deck-add-input");
+  const errorEl = item.querySelector(".deck-add-error");
+  const items = input.value.split("\n").map(line => line.trim()).filter(Boolean).map(parseCardLine);
+  errorEl.textContent = "";
+  if (!items.length) {
+    errorEl.textContent = "Saisissez au moins une carte.";
+    return;
+  }
+  try {
+    await postItems(deckId, items);
+  } catch (err) {
+    errorEl.textContent = err.code === "too_many_items" ? "Trop de cartes : 200 au maximum par deck." : err.message;
+    return;
+  }
+  await loadDecks();
+}
+
+function onDeckAction(event) {
+  const button = event.target.closest("button[data-act]");
+  const item = button?.closest(".deck-item");
+  if (!button || !item) return;
+  const deckId = item.dataset.deckId;
+  const act = button.dataset.act;
+  const note = item.querySelector(".deck-item-note");
+  if (act === "reset" || act === "delete") {
+    if (armed?.button !== button) {
+      arm(button, note, act === "delete" ? "Une copie reste récupérable par l'agent." : "");
+      return;
+    }
+    disarm();
+    if (act === "reset") runDeckAction(() => postReset(deckId), "Remise à zéro impossible");
+    else runDeckAction(() => postDelete(deckId), "Suppression impossible");
+  } else if (act === "add") {
+    disarm();
+    const zone = item.querySelector(".deck-item-add");
+    zone.hidden = !zone.hidden;
+    button.setAttribute("aria-expanded", String(!zone.hidden));
+    if (!zone.hidden) zone.querySelector(".deck-add-input").focus();
+  } else if (act === "add-cancel") {
+    const zone = item.querySelector(".deck-item-add");
+    zone.hidden = true;
+    item.querySelector('[data-act="add"]').setAttribute("aria-expanded", "false");
+  } else if (act === "add-submit") {
+    submitAddCards(item, deckId);
+  }
+}
+
+dom.deckList.addEventListener("click", onDeckAction);
+
 async function loadDecks() {
+  disarm();
   if (window.location.hash) {
     history.replaceState(null, "", window.location.pathname + window.location.search);
   }
@@ -73,15 +193,9 @@ async function loadDecks() {
   hideErrorBanner();
   const decks = data.decks || [];
   dom.deckList.innerHTML = decks.length
-    ? decks.map(deck => `
-    <button type="button" class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}">
-      <div class="deck-item-category">${escapeHtml(deck.category || "PROJET")}</div>
-      <div class="deck-item-title">${escapeHtml(deck.title)}</div>
-      <div class="deck-item-desc">${escapeHtml(deck.description || "")}</div>
-    </button>
-  `).join("")
+    ? decks.map(deckItemHtml).join("")
     : `<p class="deck-list-empty">Aucun deck pour l'instant. Créez le premier ci-dessous, ou posez une liste et commencez à trier.</p>`;
-  dom.deckList.querySelectorAll(".deck-item-card").forEach(el => {
+  dom.deckList.querySelectorAll(".deck-item-card:not([disabled])").forEach(el => {
     el.addEventListener("click", () => openDeck(el.dataset.deckId));
   });
   switchView("decks");
@@ -253,11 +367,12 @@ async function showSummary() {
     <div class="victory-hero">
       <div class="trophy-badge">✨</div>
       <h2>Toutes les cartes sont décidées</h2>
-      <p>${summary.total_decided} décisions prises en ${summary.elapsed_seconds}s</p>
+      <p>${escapeHtml(formatDecisionSummary(summary.total_decided, summary.active_seconds))}</p>
     </div>
     ${breakdownHtml ? `<div class="summary-stats-grid">${breakdownHtml}</div>` : ""}
     ${entriesHtml ? `<div class="summary-list">${entriesHtml}</div>` : ""}
     <div class="recap-actions-row">
+      ${state.deckData?.can_undo ? `<button class="recap-btn secondary" id="btn-back-to-card">Revenir à la dernière carte</button>` : ""}
       <button class="recap-btn secondary" id="btn-copy-markdown">Copier en Markdown</button>
       <button class="recap-btn primary" id="btn-back-decks">Retour aux sujets</button>
     </div>
@@ -272,6 +387,7 @@ async function showSummary() {
     }
   });
   document.getElementById("btn-back-decks")?.addEventListener("click", loadDecks);
+  document.getElementById("btn-back-to-card")?.addEventListener("click", () => triggerUndo());
 }
 
 function buildMarkdownRecap(summary, labelById) {
@@ -279,7 +395,7 @@ function buildMarkdownRecap(summary, labelById) {
     `# Synthèse Quick-Pick : ${summary.title || summary.deck_id}`,
     "",
     `- **Progression** : ${summary.total_decided}/${summary.total_items} décidés`,
-    `- **Temps total** : ${summary.elapsed_seconds}s`,
+    `- **Temps actif** : ${summary.active_seconds}s`,
     "",
     "## Détail des décisions",
   ];
@@ -297,13 +413,22 @@ function initKeyboard() {
     // Les raccourcis de jeu ne doivent jamais voler la frappe des champs de saisie
     const isTyping = e.target instanceof HTMLElement
       && Boolean(e.target.closest("input, textarea, select, [contenteditable]"));
-    if (isTyping || state.currentView !== "game") return;
+    if (isTyping || (state.currentView !== "game" && state.currentView !== "summary")) return;
     // Un panneau ouvert (historique, réglages) garde ses touches : Échap le ferme, il ne passe pas la carte,
     // et les lettres/flèches ne décident pas la carte cachée derrière.
     if (document.getElementById("deck-drawer")?.classList.contains("open")) return;
     if (document.getElementById("settings-modal")?.hidden === false) return;
+    const isUndoCombo = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && state.deckData?.can_undo;
+    // Summary: only the undo combo is live, so the last card can be reopened from the keyboard too.
+    if (state.currentView === "summary") {
+      if (isUndoCombo) {
+        e.preventDefault();
+        triggerUndo();
+      }
+      return;
+    }
     const isInputActive = (document.activeElement === dom.commentInput);
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && state.deckData?.can_undo) {
+    if (isUndoCombo) {
       e.preventDefault();
       triggerUndo();
       return;

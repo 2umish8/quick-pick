@@ -1,5 +1,6 @@
 // Module DeckForm : création d'un deck depuis l'interface d'accueil
 import { createDeck } from "./api.js";
+import { parseCardLine } from "./format.js";
 
 const CREATE_BUTTON_LABEL = "Créer et commencer à trier";
 
@@ -31,12 +32,16 @@ export function initDeckForm(callbacks = {}) {
       const items = document.getElementById("deck-create-items-input").value
         .split("\n")
         .map((line) => line.trim())
-        .filter(Boolean);
-      const result = await createDeck({
+        .filter(Boolean)
+        .map(parseCardLine);
+      const draft = {
         title: document.getElementById("deck-create-title-input").value.trim(),
         template: document.getElementById("deck-create-template-input").value,
         items,
-      });
+      };
+      const description = document.getElementById("deck-create-description-input")?.value.trim();
+      if (description) draft.description = description;
+      const result = await createDeck(draft);
       form.reset();
       setOpen(false);
       onCreated?.(result.deck_id);

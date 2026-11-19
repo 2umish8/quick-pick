@@ -105,13 +105,15 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
     else setEdge(currentY > 0 ? "south" : "north");
   };
 
-  const onEnd = () => {
+  const onEnd = (cancelled = false) => {
     if (!isDown) return;
     isDown = false;
     clearEdges();
     const absX = Math.abs(currentX), absY = Math.abs(currentY);
     let dir = null;
-    if (absX >= SWIPE_THRESHOLD && absX >= absY) dir = currentX > 0 ? "east" : "west";
+    // A cancelled gesture (touchcancel / pointercancel) never decides, whatever the distance.
+    if (cancelled) dir = null;
+    else if (absX >= SWIPE_THRESHOLD && absX >= absY) dir = currentX > 0 ? "east" : "west";
     else if (absY >= SWIPE_THRESHOLD) dir = currentY > 0 ? "south" : "north";
 
     const action = (item.actions || []).find(a => a.direction === dir);
@@ -166,8 +168,8 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
     onMove(e.touches[0].clientX, e.touches[0].clientY);
   }, { passive: false });
 
-  cardEl.addEventListener("touchend", onEnd, { passive: true });
-  cardEl.addEventListener("touchcancel", onEnd, { passive: true });
+  cardEl.addEventListener("touchend", () => onEnd(), { passive: true });
+  cardEl.addEventListener("touchcancel", () => onEnd(true), { passive: true });
 
   // Souris desktop (PointerEvents sans conflit touch)
   cardEl.addEventListener("pointerdown", e => {
@@ -179,13 +181,13 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
     if (e.pointerType === "touch") return;
     onMove(e.clientX, e.clientY);
   });
-  const finishMouse = e => {
+  const finishMouse = (e, cancelled = false) => {
     if (e.pointerType === "touch") return;
-    onEnd();
+    onEnd(cancelled);
     try { cardEl.releasePointerCapture(e.pointerId); } catch {}
   };
-  cardEl.addEventListener("pointerup", finishMouse);
-  cardEl.addEventListener("pointercancel", finishMouse);
+  cardEl.addEventListener("pointerup", e => finishMouse(e));
+  cardEl.addEventListener("pointercancel", e => finishMouse(e, true));
 }
 
 function hasMarkdown(str) {
