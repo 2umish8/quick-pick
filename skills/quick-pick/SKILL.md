@@ -1,157 +1,66 @@
 ---
 name: quick-pick
-description: "Déléguer des séries d'arbitrages ou de tris rapides à l'humain via une pile de cartes swipables (mobile & desktop)."
-version: 2.0.0
+description: "Use when you need a human to arbitrate 4+ independent items (backlog, rules, skills, PRs, options) as a swipe-card deck instead of a long chat questionnaire; not for a single blocking question."
+version: 2.1.0
 license: MIT
-platforms: [linux, darwin, windows]
+platforms: [linux, macos, windows]
+category: orchestration
 metadata:
-  tags: [triage, arbitration, decision, review, swipe, mobile-first, async, byok]
+  tags: [triage, arbitration, decision, review, swipe, mobile-first, async]
 ---
 
-# Quick-Pick Skill
+# Quick-Pick : arbitrages par cartes
 
-Permet aux agents d'IA de soumettre des lots d'arbitrages à l'utilisateur sous forme de pile de cartes tactiles (1 carte à la fois, swipe physique mobile / raccourcis clavier desktop).
+L'agent prépare un deck, l'humain le tranche en swipant (téléphone) ou au clavier (PC), l'agent lit les décisions et reprend. Chaîne complète : **créer → prévenir → attendre → lire → agir**.
 
 ## Quand l'utiliser
+- 4 éléments indépendants ou plus à faire trancher : tri de backlog ou de tickets, règles à garder / modifier / supprimer, skills ou dépendances à purger, options d'architecture, PRs.
+- Pas pour une question unique et bloquante : la poser directement.
+- Jamais de secret ni de jeton dans les cartes : les decks sont des fichiers JSON en clair (et leurs sauvegardes aussi).
 
-Utiliser ce skill dès qu'un agent doit faire arbitrer plusieurs éléments :
-- Tri ou élagage de backlog / tickets de gestion de projet.
-- Revue de règles de prompt / doctrine à conserver, modifier ou supprimer.
-- Audit de skills ou dépendances à garder ou purger.
-- Validation d'options d'architecture ou de design.
-- Relecture de PRs ou propositions de refactoring.
+## Où lancer
+Les commandes `deck_cli.py` se lancent **depuis le dossier du dépôt** (`cd <dépôt> && python3 deck_cli.py …`) : hors de ce dossier, le fichier est introuvable. `QUICK_PICK_DATA_DIR` change le dossier des decks (utile pour tester sur un dossier temporaire sans toucher aux vrais decks).
+L'API de l'agent est sur `http://127.0.0.1:8791` (port par défaut) : réservée à l'agent. **Ce lien-là ne se donne jamais à l'humain** : il reçoit l'URL publique de l'instance (celle que la règle d'environnement de l'agent prescrit pour les outils servis), suivie de `/#<deck_id>`.
 
-> **Avantage** : Évite les pavés illisibles de 20 questions en chat. L'utilisateur swipe le deck en 60 secondes sur son téléphone ou son poste.
+## 1. Créer un deck
 
----
-
-## 1. Créer un Deck d'Arbitrage
-
-### Méthode recommandée : CLI `deck_cli.py`
-
-Préparez un fichier JSON d'items :
-```json
-[
-  {
-    "id": "item-1",
-    "title": "Nom de l'élément à trancher",
-    "badges": [
-      { "label": "URGENT", "variant": "warning" },
-      { "label": "BACKEND", "variant": "neutral" }
-    ],
-    "bullets": [
-      "Argument ou fait 1",
-      "Argument ou fait 2"
-    ],
-    "description": "Détail optionnel contextuel"
-  }
-]
-```
-
-Lancez la création du deck :
+CLI (recommandé) :
 ```bash
-python3 deck_cli.py create \
-  --id "mon-arbitrage" \
-  --title "Titre explicite de l'arbitrage" \
-  --category "AUDIT" \
-  --template "triage" \
-  --items-file items.json
+python3 deck_cli.py create --id mon-arbitrage --title "Titre explicite" \
+  --items-file items.json            # ou --items-file - pour lire stdin
 ```
+Options : `--description`, `--guidelines` (critères d'arbitrage), `--category`, `--template triage|binary|priority`, `--actions-file` (remplace le template ; liste d'au moins 2 actions `{id, label}`).
+- `--id` : lettres, chiffres, `_` et `-`, 128 caractères max. Il doit être neuf : un `id` existant sort en code 1 (« supprimez-le d'abord avec delete »).
+- `items.json` : liste de `{ "id", "title", "description"?, "bullets"?, "badges"? }` ; `id` et `title` obligatoires par carte (`badges` : `[{label, variant}]`).
+- Le CLI ne limite pas le nombre de cartes ; viser 200 maximum comme l'interface et l'API.
 
-### Méthode alternative : API HTTP `POST /api/decks`
+API HTTP (`POST /api/decks`, JSON) : `title`, `items` (lignes ; ou objets `{title, description, bullets}`), `template`, `id`?, `description`?. 200 cartes max, 500 caractères par titre. **`category`, `guidelines` et `badges` y sont ignorés** (utiliser le CLI). Sans `id`, il est dérivé du titre et un doublon donne `mon-arbitrage-2` : **lire `deck_id` dans la réponse `201`**, pas le deviner. Avec un `id` explicite déjà pris : `409`.
+Dans l'interface, une ligne `titre :: détail` crée une carte avec description.
 
-Même chose sans fichier JSON, à partir d'une simple liste de lignes (une ligne = une carte) :
+Actions par défaut (polarité et touches constantes) : Est `d` Conserver / Valider · Ouest `a` Élaguer / Rejeter · Nord `w` À revoir / Modifier · Sud `s` option spéciale. `binary` : Oui / Non. `priority` : Immédiat (`now`) / Ignorer (`drop`) / Plus tard (`later`). Les valeurs de `chosen_action` sont `approve` / `reject` / `review` (triage), `now` / `drop` / `later` (priority), `approve` / `reject` (binary).
 
+## 2. Prévenir l'humain
+Dire où il tranche, avec l'URL publique et le deck : « Deck prêt : <URL_PUBLIQUE>/#mon-arbitrage ». Il peut ajouter un commentaire par carte, différer (`Echap` ou `x`), annuler (`Ctrl+Z`) et, depuis l'écran de fin, **revenir à la dernière carte**. **L'agent ne tranche jamais à la place de l'humain** (la route `decide` existe pour l'interface, pas pour l'agent).
+
+## 3. Attendre, lire, agir
 ```bash
-curl -X POST http://localhost:8791/api/decks \
-  -H 'Content-Type: application/json' \
-  -d '{"title": "Mon-arbitrage", "template": "triage", "items": ["Élément 1", "Élément 2"]}'
-```
-
-`items` est un tableau de lignes non vides (200 cartes max, 500 caractères par carte), `template` vaut `triage` (défaut), `binary` ou `priority`. Sans champ `id`, l'identifiant est dérivé du titre ; avec un `id` explicite, la création échoue en `409` si le deck existe déjà (jamais d'écrasement). La réponse `201` contient l'état du deck, prêt à être joué.
-
-L'interface web expose exactement le même parcours (bouton **Créer un deck** sur l'écran d'accueil).
-
-### Convention canonique des options par défaut
-
-Pour garantir la mémoire musculaire, tout deck standard suit la polarité et les directions canoniques :
-
-| Ordre | Polarité | Direction swipe | Touche | Couleur | Action par défaut (template `triage`) |
-|---|---|---|---|---|---|
-| **Option 1** | **Positif** | **Droite** (`east`) | `d` | `success` | *Conserver / Valider* |
-| **Option 2** | **Négatif** | **Gauche** (`west`) | `a` | `danger` | *Élaguer / Rejeter* |
-| **Option 3** | **Neutre** | **Haut** (`north`) | `w` | `warning` | *À revoir / Modifier* |
-| **Option 4** | **Spécial** | **Bas** (`south`) | `s` | `info` | *Archiver / Escalader* |
-| **5+** | **Custom** | Dock / Boutons | Clavier | `neutral` | Personnalisable (`--actions-file`) |
-
-### Templates d'actions intégrés
-
-* **`triage`** (3 voies, par défaut) :
-  - Est (`d`) : *Conserver / Valider* (vert)
-  - Ouest (`a`) : *Élaguer / Rejeter* (rouge)
-  - Nord (`w`) : *À revoir / Modifier* (jaune)
-* **`binary`** (2 voies) :
-  - Est (`d`) : *Oui / Valider*
-  - Ouest (`a`) : *Non / Rejeter*
-* **`priority`** (3 voies) :
-  - Est (`d`) : *Immédiat*
-  - Ouest (`a`) : *Ignorer*
-  - Nord (`w`) : *Plus tard*
-
----
-
-## 2. Inviter l'Utilisateur à Trancher
-
-Donnez le lien direct avec le nom du deck :
-> *"J'ai préparé un deck de tri [Titre du deck] sur http://localhost:8791/#mon-arbitrage."*
-
-L'utilisateur peut trancher :
-- En swipant librement sur mobile ou via raccourcis clavier (`d`, `a`, `w` ou flèches directionnelles).
-- En ajoutant un **commentaire optionnel** dans le champ texte dédié avant de trancher.
-- En différant une carte hésitante via **`Echap`** ou **`x`** (skip en fond de pile).
-- En annulant à tout moment via `Ctrl+Z` ou le bouton mobile `↩ Annuler`.
-
----
-
-## 3. Récupérer les Décisions
-
-### Vérifier l'avancement
-```bash
-python3 deck_cli.py status mon-arbitrage
-```
-Retourne l'objet d'état avec `is_completed: true|false`, `pending_count`, `decided_count` et `completed_at` (date de la dernière décision une fois terminé).
-
-### Attendre la fin sans deviner
-```bash
+python3 deck_cli.py status mon-arbitrage           # is_completed, pending_count, decided_count
 python3 deck_cli.py wait mon-arbitrage --timeout 60
+python3 deck_cli.py summary mon-arbitrage --format md   # ou --format json
 ```
-Sonde toutes les 2 s et affiche une ligne JSON `{deck_id, is_completed, decided, total}`. Code de sortie **0** = terminé, **3** = délai écoulé (rien d'anormal : relancer), **1** = deck absent ou erreur de stockage. La durée d'un appel d'outil est bornée : garder un `--timeout` court (≈ 60 s), relancer `wait` en boucle, puis lire la synthèse. Un deck vide sort aussitôt avec 0.
+- `wait` sonde toutes les 2 s et affiche une ligne JSON `{deck_id, is_completed, decided, total}`. Sortie **0** terminé, **3** délai écoulé (normal : relancer), **1** deck absent ou stockage en erreur. Garder `--timeout` court (≈ 60 s).
+- **Attente longue** : si l'humain n'a pas fini après ~1 h, ne pas boucler : le deck persiste, noter la reprise (handoff) et passer à autre chose.
+- `summary` : ventilation avec libellés, « Temps actif » ; en JSON `active_seconds`, `completed_at`, `actions_breakdown_labeled`.
+- Un deck terminé se laisse en place (l'humain peut y revenir) ; `delete` seulement sur demande.
 
-### Lire le récapitulatif final
+## 4. Remise à zéro, ajout, sauvegardes
+L'interface propose « Remettre à zéro », « Supprimer » et « Ajouter des cartes » (`POST /api/decks/<id>/reset|delete|items`) ; le CLI a `reset` et `delete`. Avant chacune de ces opérations (et avant `restore`), le deck est copié dans `<dossier des decks>/.history/<id>/` (10 versions les plus récentes). **C'est l'agent qui restaure**, l'humain n'a aucune commande à taper :
 ```bash
-python3 deck_cli.py summary mon-arbitrage --format md
-```
-Retourne un rapport Markdown directement exploitable (ventilation avec libellés, « Temps actif »), ou en JSON brut (`--format json`, avec `active_seconds`, `completed_at`, `actions_breakdown_labeled`).
-
-### Sauvegardes et restauration (c'est l'agent qui restaure)
-Avant toute remise à zéro, suppression, ajout de cartes ou restauration, le deck est copié dans `<dossier des decks>/.history/<id>/` (les 10 plus récentes). L'utilisateur n'a aucune commande à taper : s'il regrette un clic, c'est l'agent qui lance :
-```bash
-python3 deck_cli.py history mon-arbitrage              # versions, la plus récente d'abord
+python3 deck_cli.py history mon-arbitrage              # la plus récente d'abord
 python3 deck_cli.py restore mon-arbitrage <version>    # aussi pour un deck supprimé
 ```
-L'interface propose « Remettre à zéro », « Supprimer » et « Ajouter des cartes » (routes `POST /api/decks/<id>/reset|delete|items`). Le CLI ne sème plus les decks d'exemple.
+Une version est l'état **avant** l'opération indiquée par son suffixe (`-reset`, `-delete`, `-items`, `-restore`) ; un `restore` crée lui-même une copie.
+Le serveur sème des decks d'exemple au démarrage si le dossier est vide ; le CLI, non.
 
----
-
-## 4. Suggestions IA & BYOK (OpenAI, Ollama, Custom)
-
-L'interface Quick-Pick permet de brancher n'importe quel modèle de décision (OpenAI, Ollama local, Groq, OpenRouter ou API FastAPI custom) pour afficher des badges de pré-qualification sur les cartes.
-
-1. **Test en CLI** :
-   ```bash
-   python3 deck_cli.py classifier --endpoint "http://localhost:11434/v1" --api-key ""
-   ```
-2. **Configuration dans l'interface** :
-   - Bouton **`⚙️`** dans le header de l'application.
-   - Saisie du protocole (OpenAI-compatible ou Custom Webhook), de l'Endpoint, du Modèle et de la clé API (BYOK).
-   - Les clés sont conservées dans le `localStorage` du navigateur de l'utilisateur, sans jamais fuiter dans des fichiers serveur ou dépôts Git.
+## 5. Suggestions IA (optionnel)
+Le classifieur ajoute des badges de pré-qualification, réglé dans l'interface (bouton `⚙️`) : endpoint, modèle, clé de l'humain. **Ne jamais passer une clé en argument** : `QUICK_PICK_API_KEY` ou `--api-key-stdin` pour un test (`deck_cli.py classifier --endpoint <URL>`). Un endpoint local ou privé exige `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. Détail de ce que stocke le navigateur et de ce que voit le serveur : README, section « Where your API key lives ».
