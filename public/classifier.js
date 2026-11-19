@@ -300,6 +300,8 @@ export function initSettingsModal() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !modal.hidden) {
       closeModal();
+      // Cet Échap a fermé la fenêtre : il ne doit pas aussi passer la carte (écouteur du jeu sur window).
+      e.stopPropagation();
     }
   });
 

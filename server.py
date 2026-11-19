@@ -385,6 +385,11 @@ class QuickPickHandler(BaseHTTPRequestHandler):
                 if not target: return self.send_json(404, {"error": "item_not_found"})
                 valid = [a.get("id") for a in resolve_item_actions(deck.get("default_actions", []), target)]
                 if act_id not in valid: return self.send_json(400, {"error": "invalid_action", "valid": valid})
+                if target.get("status") == "decided":
+                    # Never overwrite a decision silently (second tab, agent, retry). Same action = idempotent.
+                    if target.get("chosen_action") == act_id:
+                        return self.send_json(200, {"ok": True, **find_deck_state(deck)})
+                    return self.send_json(409, {"error": "already_decided", "chosen_action": target.get("chosen_action")})
                 raw_c = payload.get("comment")
                 clean_c = raw_c.strip() if isinstance(raw_c, str) and raw_c.strip() else None
                 next_seq = max((it.get("decided_seq") or 0 for it in items), default=0) + 1
@@ -409,6 +414,7 @@ class QuickPickHandler(BaseHTTPRequestHandler):
             elif action == "skip":
                 idx = next((i for i, it in enumerate(items) if it.get("id") == payload.get("item_id")), None)
                 if idx is None: return self.send_json(404, {"error": "item_not_found"})
+                if items[idx].get("status") == "decided": return self.send_json(409, {"error": "already_decided"})
                 items.append(items.pop(idx))
             else: return self.send_json(404, {"error": f"action_inconnue_{action}"})
             save_deck(deck_id, deck)

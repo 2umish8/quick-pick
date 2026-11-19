@@ -21,8 +21,16 @@ export function initDrawer(callbacks = {}) {
   tabDecided?.addEventListener("click", () => switchTab("decided"));
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeDrawer();
+    // Cet Échap a fermé le panneau : il ne doit pas aussi passer la carte (écouteur du jeu sur window).
+    if (e.key === "Escape" && isDrawerOpen()) {
+      closeDrawer();
+      e.stopPropagation();
+    }
   });
+}
+
+function isDrawerOpen() {
+  return Boolean(document.getElementById("deck-drawer")?.classList.contains("open"));
 }
 
 export function openDrawer() {

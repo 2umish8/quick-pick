@@ -543,6 +543,22 @@ class DeckCreationApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(state["current_item"]["id"], "x2")
 
+    def test_deciding_an_already_decided_item_never_overwrites(self):
+        self.post("/api/decks", {"id": "double", "title": "Double", "items": ["a", "b"]})
+        first = self.post("/api/decks/double/decide", {"item_id": "item-1", "action": "approve", "comment": "ok"})
+        self.assertEqual(first[0], 200)
+        # Même action (retry réseau, double envoi) : idempotent, rien ne change.
+        again = self.post("/api/decks/double/decide", {"item_id": "item-1", "action": "approve"})
+        self.assertEqual(again[0], 200)
+        self.assertEqual(again[1]["decided_items"][0]["comment"], "ok")
+        # Autre action (autre onglet, agent) : refus explicite, la décision d'origine reste.
+        status, data = self.post("/api/decks/double/decide", {"item_id": "item-1", "action": "reject"})
+        self.assertEqual((status, data["error"]), (409, "already_decided"))
+        self.assertEqual(deck_store.load_deck("double")["items"][0]["chosen_action"], "approve")
+        # Passer une carte déjà tranchée ne réordonne pas le deck.
+        self.assertEqual(self.post("/api/decks/double/skip", {"item_id": "item-1"})[0], 409)
+        self.assertEqual([it["id"] for it in deck_store.load_deck("double")["items"]], ["item-1", "item-2"])
+
     def test_negative_content_length_is_rejected_without_hanging(self):
         conn = http.client.HTTPConnection("127.0.0.1", self.httpd.server_address[1], timeout=5)
         try:

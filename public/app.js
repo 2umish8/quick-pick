@@ -146,6 +146,13 @@ async function onCardDecide(actionId) {
     const nextState = await postDecision(state.activeDeckId, state.deckData.current_item.id, actionId, comment);
     handleDeckState(nextState);
   } catch (err) {
+    if (err.message === "already_decided") {
+      // Une autre fenêtre ou l'agent a déjà tranché cette carte : on se resynchronise, sans écraser.
+      try {
+        handleDeckState(await fetchDeckState(state.activeDeckId));
+        return;
+      } catch { /* on retombe sur le bandeau d'erreur */ }
+    }
     restoreCurrentCard();
     showErrorBanner(`Décision non enregistrée : ${err.message}`, () => onCardDecide(actionId));
   } finally {
