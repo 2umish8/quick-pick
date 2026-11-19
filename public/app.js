@@ -85,16 +85,20 @@ function deckItemHtml(deck) {
   const title = escapeHtml(deck.title);
   const desc = escapeHtml(deck.description || "");
   let status;
-  if (deck.invalid) status = `<span class="deck-item-badge invalid">Illisible</span>`;
-  else if (deck.is_completed) status = `<span class="deck-item-badge done">Terminé</span>`;
-  else status = `<span class="deck-item-progress">${escapeHtml(String(deck.decided))}/${escapeHtml(String(deck.total))} décidés</span>`;
+  if (deck.invalid) status = `<span class="deck-item-invalid"><span class="deck-ico" aria-hidden="true">⚠</span>Illisible</span>`;
+  else if (deck.is_completed) status = `<span class="deck-item-done"><span class="deck-ico" aria-hidden="true">✓</span>Terminé</span>`;
+  else {
+    // Colour = meaning: nothing decided yet -> neutral grey, in progress -> amber.
+    const stateClass = Number(deck.decided) > 0 ? "state-active" : "state-zero";
+    status = `<span class="deck-item-progress ${stateClass}"><span class="deck-item-count">${escapeHtml(String(deck.decided))}/${escapeHtml(String(deck.total))}</span> <span class="deck-item-unit">décidés</span></span>`;
+  }
   const cardOpen = deck.invalid
     ? `<button type="button" class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}" disabled>`
     : `<button type="button" class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}">`;
   const actions = deck.invalid
-    ? `<button type="button" class="deck-act danger" data-act="delete">Supprimer</button>`
+    ? `<button type="button" class="deck-act danger" data-act="delete" title="Supprimer">Supprimer</button>`
     : `<button type="button" class="deck-act" data-act="reset">Remettre à zéro</button>
-       <button type="button" class="deck-act danger" data-act="delete">Supprimer</button>
+       <button type="button" class="deck-act danger" data-act="delete" title="Supprimer">Supprimer</button>
        <button type="button" class="deck-act" data-act="add" aria-expanded="false">Ajouter des cartes</button>`;
   const addZone = deck.invalid ? "" : `
       <div class="deck-item-add" hidden>

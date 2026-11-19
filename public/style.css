@@ -17,6 +17,12 @@
   --info-glow: rgba(56, 189, 248, 0.35);
   --radius-card: 16px;
   --radius-btn: 10px;
+  /* Soft contrast (profile rule 46): no pure black/white for text or buttons. */
+  --on-accent: #0C0E12;
+  --info-deep: #0EA5E9;
+  --success-deep: #16A34A;
+  --neutral-state: #8B93A1;
+  color-scheme: dark;
 }
 
 /* The hidden attribute is authoritative: CSP forbids inline style attributes. */
@@ -42,6 +48,13 @@ body {
   user-select: none;
 }
 
+/* Native elements in the tool's own look (profile rule 20) */
+* { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
+::selection { background: rgba(56, 189, 248, 0.3); color: var(--text); }
+button, select, summary, label[for] { cursor: pointer; }
+button:disabled { cursor: default; }
+input, textarea { cursor: text; caret-color: var(--info); }
+
 /* Header */
 header.app-header {
   padding: 14px 20px;
@@ -58,13 +71,15 @@ header.app-header {
 .logo-zone {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 2px 10px;
+  flex-wrap: wrap;
   cursor: pointer;
   /* MOW-188: real <button> now, without the native chrome. */
   background: none; border: 0; padding: 0;
   font: inherit; color: inherit; text-align: left;
 }
 .logo-title {
+  white-space: nowrap;
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.3px;
@@ -72,17 +87,16 @@ header.app-header {
 .deck-pill {
   font-size: 12px;
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--muted);
-  max-width: 180px;
+  color: var(--info);
+  max-width: calc(100vw - 40px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
 }
+.deck-pill::before { content: "← " / ""; }
 .header-actions-zone {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -93,7 +107,7 @@ header.app-header {
   color: var(--text);
   font-size: 13px;
   padding: 5px 9px;
-  border-radius: 20px;
+  border-radius: var(--radius-btn);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -110,7 +124,7 @@ header.app-header {
   font-size: 12px;
   font-weight: 600;
   padding: 5px 11px;
-  border-radius: 20px;
+  border-radius: var(--radius-btn);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -127,11 +141,12 @@ header.app-header {
   font-size: 12px;
   font-weight: 600;
   padding: 5px 12px;
-  border-radius: 20px;
+  border-radius: var(--radius-btn);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
   transition: all 0.15s ease;
 }
 .progress-pill-btn:hover {
@@ -173,16 +188,28 @@ main.stage-shell {
 .deck-item-card:disabled { cursor: default; opacity: 0.7; }
 .deck-item-card:disabled:hover { transform: none; border-color: var(--border); }
 .deck-item { display: grid; gap: 8px; }
-.deck-item-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.deck-item-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; white-space: nowrap; }
 .deck-item-top .deck-item-category { margin-bottom: 0; }
-.deck-item-progress { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.deck-item-badge { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); }
-.deck-item-badge.done { color: var(--success); border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.08); }
-.deck-item-badge.invalid { color: #F87171; border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08); }
-.deck-item-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* The figure is the message, the word beside it is secondary; colour = state (grey / amber / green). */
+.deck-item-progress { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.deck-item-count { font-size: 20px; font-weight: 800; line-height: 1; }
+.deck-item-unit { font-size: 11px; font-weight: 500; color: var(--muted); }
+.deck-item-progress.state-zero .deck-item-count { color: var(--neutral-state); }
+.deck-item-progress.state-active .deck-item-count { color: var(--warning); }
+.deck-item-done, .deck-item-invalid { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.deck-item-done { color: var(--success); }
+.deck-item-invalid { color: #F87171; }
+.deck-ico { font-size: 14px; line-height: 1; }
+.deck-item-actions { display: flex; flex-wrap: nowrap; gap: 6px; }
 .deck-act {
   min-height: 36px;
-  padding: 6px 14px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 0 0 auto;
   border-radius: var(--radius-btn);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border);
@@ -193,6 +220,14 @@ main.stage-shell {
 }
 .deck-act:hover { background: rgba(255, 255, 255, 0.12); border-color: var(--border-focus); }
 .deck-act.danger { color: #F87171; }
+/* Pictograms by CSS (empty alt text = ignored by screen readers); the two-step confirm swaps the text only. */
+.deck-act[data-act="reset"]::before { content: "↺" / ""; }
+.deck-act[data-act="delete"]::before { content: "🗑\FE0E" / ""; }
+.deck-act[data-act="add"]::before { content: "＋" / ""; }
+/* Delete is icon-only at rest (its text stays in the DOM for screen readers); armed it shows "Confirmer ?". */
+.deck-act[data-act="delete"]:not(.armed) { font-size: 0; padding: 6px 11px; gap: 0; }
+.deck-act[data-act="delete"]:not(.armed)::before { font-size: 15px; }
+.deck-act.armed::before { content: none; }
 .deck-act.armed { background: rgba(239, 68, 68, 0.16); border-color: rgba(239, 68, 68, 0.5); color: #FCA5A5; }
 .deck-item-note { font-size: 12.5px; color: var(--muted); }
 .deck-item-add { display: grid; gap: 8px; }
@@ -214,17 +249,19 @@ main.stage-shell {
 .deck-create-toggle {
   margin-top: 14px;
   width: 100%;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--info), var(--info-deep));
+  border: 0;
   border-radius: var(--radius-btn);
-  color: var(--text);
+  color: var(--on-accent);
   font: inherit;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   padding: 13px 11px;
   cursor: pointer;
+  white-space: nowrap;
 }
-.deck-create-toggle:hover { background: rgba(255, 255, 255, 0.12); border-color: var(--border-focus); }
+.deck-create-toggle::before { content: "＋ " / ""; }
+.deck-create-toggle:hover { filter: brightness(1.08); }
 .deck-create-form {
   margin-top: 14px;
   display: flex;
@@ -237,7 +274,7 @@ main.stage-shell {
 }
 .deck-create-head { font-size: 16px; font-weight: 700; }
 .deck-create-field { display: flex; flex-direction: column; gap: 6px; }
-.deck-create-label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.deck-create-label { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .deck-create-input {
   width: 100%;
   background: var(--panel-layer-1);
@@ -250,13 +287,16 @@ main.stage-shell {
   user-select: text;
 }
 .deck-create-input::placeholder { color: #6B7280; }
-.deck-create-input:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; border-color: var(--border-focus); }
+.deck-create-input:hover { border-color: var(--border-focus); }
+.deck-create-input:focus, .deck-create-input:focus-visible { border-color: var(--info); box-shadow: 0 0 0 3px var(--info-glow); }
+select.deck-create-input { cursor: pointer; }
+textarea.deck-create-input { cursor: text; }
 .deck-create-textarea { resize: vertical; min-height: 130px; line-height: 1.45; }
 .deck-create-hint { font-size: 11.5px; color: var(--muted); }
 .deck-create-error { min-height: 18px; font-size: 12.5px; color: #F87171; }
 .deck-create-submit {
-  background: var(--success);
-  color: #000;
+  background: linear-gradient(180deg, var(--info), var(--info-deep));
+  color: var(--on-accent);
   border: 0;
   border-radius: var(--radius-btn);
   font: inherit;
@@ -265,6 +305,7 @@ main.stage-shell {
   padding: 14px;
   cursor: pointer;
 }
+.deck-create-submit:hover { filter: brightness(1.08); }
 .deck-create-submit:disabled { opacity: 0.55; cursor: progress; }
 
 /* Bannière d'erreur réseau */
@@ -320,8 +361,8 @@ main.stage-shell {
   flex-direction: column;
   align-items: center;
 }
-.summary-stat-val { font-size: 20px; font-weight: 800; color: #F8FAFC; }
-.summary-stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+.summary-stat-val { font-size: 22px; font-weight: 800; color: var(--text); }
+.summary-stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--muted); margin-top: 2px; white-space: nowrap; }
 .summary-list {
   text-align: left;
   display: flex;
@@ -348,8 +389,13 @@ main.stage-shell {
   font-weight: 700;
   cursor: pointer;
   border: 0;
+  white-space: nowrap;
+  font: inherit;
+  font-weight: 700;
 }
-.recap-btn.primary { background: var(--success); color: #000; }
+.recap-btn.primary { background: linear-gradient(180deg, var(--success), var(--success-deep)); color: var(--on-accent); }
+.recap-btn.primary:hover { filter: brightness(1.08); }
+#btn-back-to-card::before { content: "↶ " / ""; }
 .recap-btn.secondary { background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); color: var(--text); }
 .recap-btn.secondary:hover { background: rgba(255, 255, 255, 0.12); border-color: var(--border-focus); }
 
@@ -466,4 +512,12 @@ main.stage-shell {
 :focus-visible {
   outline: 2px solid var(--info);
   outline-offset: 2px;
+}
+
+/* Narrow screens: tighter card padding so the management row stays on one line. */
+@media (max-width: 480px) {
+  .deck-item-card { padding: 16px; }
+  .deck-item-actions { gap: 5px; }
+  .deck-act { padding: 6px 8px; font-size: 12px; }
+  .deck-act[data-act="delete"]:not(.armed) { padding: 6px 10px; }
 }

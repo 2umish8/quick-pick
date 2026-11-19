@@ -61,7 +61,7 @@ test("deck list: a deck description is escaped and counters go through escapeHtm
 test("deck list: invalid deck shows only 'Supprimer' with the id from the list, and is not playable", () => {
   const app = readPublic("app.js");
   const item = app.slice(app.indexOf("function deckItemHtml"), app.indexOf("async function runDeckAction"));
-  assert.match(item, /deck\.invalid\s*\?\s*`<button type="button" class="deck-act danger" data-act="delete">Supprimer<\/button>`/);
+  assert.match(item, /deck\.invalid\s*\?\s*`<button type="button" class="deck-act danger" data-act="delete"(?: title="Supprimer")?>Supprimer<\/button>`/);
   assert.match(item, /deck\.invalid\s*\n?\s*\?\s*`<button type="button" class="deck-item-card"[^`]*disabled>`/);
   // The delete handler sends the id read from the list entry (data-deck-id), never anything from the file body.
   assert.match(app, /const deckId = item\.dataset\.deckId/);
