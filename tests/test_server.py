@@ -454,7 +454,7 @@ class DeckCreationTests(unittest.TestCase):
         for case in cases:
             with self.subTest(case=case.get("template") or case["items"][:1]), self.assertRaises(DeckError):
                 deck_store.create_deck(**case)
-        self.assertEqual(os.listdir(self.decks_dir), [])
+        self.assertEqual([n for n in os.listdir(self.decks_dir) if not n.startswith(".")], [])
 
     def test_create_deck_never_overwrites_existing_deck(self):
         deck_store.create_deck(title="Sprint", items=["a"], deck_id="sprint")
@@ -587,7 +587,7 @@ class DeckCreationApiTests(unittest.TestCase):
                 status, body = self.post("/api/decks", payload)
                 self.assertEqual(status, 400)
                 self.assertTrue(body.get("error"))
-        self.assertEqual(os.listdir(self.decks_dir), [])
+        self.assertEqual([n for n in os.listdir(self.decks_dir) if not n.startswith(".")], [])
 
     def test_post_decks_409_on_existing_id(self):
         self.assertEqual(self.post("/api/decks", {"title": "A", "items": ["x"], "id": "same"})[0], 201)

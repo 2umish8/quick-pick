@@ -7,6 +7,8 @@ __pycache__/
 *.tmp
 # User decks: never versioned, seeded from examples/decks/ on first run.
 data/
+.quick-pick.lock
+.history/
 build/
 dist/
 *.egg-info/

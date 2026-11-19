@@ -2,19 +2,19 @@
 """quick-pick — Serveur HTTP & API de décision (SOLID / SRP)."""
 import hmac
 import ipaddress
-import json, os, re, sys, threading
+import json, os, re, sys
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 import deck_store
-from deck_store import DeckError, DeckExistsError, create_deck, find_deck_state, list_available_decks, load_deck, save_deck, resolve_item_actions
+from deck_store import (DeckError, DeckExistsError, StorageError, create_deck, deck_lock, find_deck_state,
+                        list_available_decks, load_deck, resolve_item_actions, save_deck, validate_new_deck)
 from deck_summary import compute_deck_summary
 
 BIND_HOST = os.environ.get("QUICK_PICK_HOST", "127.0.0.1")
 DEFAULT_PORT = int(os.environ.get("QUICK_PICK_PORT", "8791"))
 QUICK_PICK_TOKEN = os.environ.get("QUICK_PICK_TOKEN", "")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
-STATE_LOCK = threading.Lock()
 MAX_BODY_SIZE = 2 * 1024 * 1024  # 2 Mo
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
@@ -275,6 +275,9 @@ class QuickPickHandler(BaseHTTPRequestHandler):
     def _deny(self, status, error, head_only=False):
         return self.send_json(status, {"error": error}, head_only=head_only)
 
+    def _storage_error(self, err):
+        return self.send_json(err.http_status, {"error": err.code, "detail": err.detail})
+
     def _check_host(self, head_only=False):
         if not is_allowed_host(self.headers.get("Host")):
             self._deny(403, "forbidden_host", head_only=head_only)
@@ -320,11 +323,11 @@ class QuickPickHandler(BaseHTTPRequestHandler):
             p = [x for x in path.split("/") if x]
             if len(p) == 3:
                 try:
-                    with STATE_LOCK: return self.send_json(200, find_deck_state(load_deck(p[2])), head_only=head_only)
+                    return self.send_json(200, find_deck_state(load_deck(p[2])), head_only=head_only)
                 except DeckError as err: return self.send_json(404, {"error": str(err)}, head_only=head_only)
             if len(p) == 4 and p[3] == "summary":
                 try:
-                    with STATE_LOCK: return self.send_json(200, compute_deck_summary(load_deck(p[2])), head_only=head_only)
+                    return self.send_json(200, compute_deck_summary(load_deck(p[2])), head_only=head_only)
                 except DeckError as err: return self.send_json(404, {"error": str(err)}, head_only=head_only)
         return self.serve_static(path, head_only=head_only)
 
@@ -357,68 +360,80 @@ class QuickPickHandler(BaseHTTPRequestHandler):
             return self.send_json(404, {"error": "action_inconnue"})
 
         if len(p) == 2 and p[0] == "api" and p[1] == "decks":
-            # Under STATE_LOCK so the exists-check and the write cannot race another request.
-            with STATE_LOCK:
-                try:
-                    deck = create_deck(
-                        title=payload.get("title"),
-                        items=payload.get("items"),
-                        template=payload.get("template") or "triage",
-                        deck_id=payload.get("id"),
-                    )
-                except DeckExistsError as err:
-                    return self.send_json(409, {"error": str(err)})
-                except DeckError as err:
-                    return self.send_json(400, {"error": str(err)})
-                return self.send_json(201, {"ok": True, "deck_id": deck["id"], "deck": find_deck_state(deck)})
+            # Pure validations first (a rejected request never creates the lock file), then the
+            # exists-check and the write under the cross-process deck lock.
+            create_args = dict(
+                title=payload.get("title"),
+                items=payload.get("items"),
+                template=payload.get("template") or "triage",
+                deck_id=payload.get("id"),
+            )
+            try:
+                validate_new_deck(**create_args)
+            except DeckError as err:
+                return self.send_json(400, {"error": str(err)})
+            try:
+                with deck_lock():
+                    try:
+                        deck = create_deck(**create_args)
+                    except DeckExistsError as err:
+                        return self.send_json(409, {"error": str(err)})
+                    except DeckError as err:
+                        return self.send_json(400, {"error": str(err)})
+                    return self.send_json(201, {"ok": True, "deck_id": deck["id"], "deck": find_deck_state(deck)})
+            except StorageError as err:
+                return self._storage_error(err)
 
         if len(p) < 4 or p[0] != "api" or p[1] != "decks": return self.send_json(404, {"error": "not_found"})
         deck_id, action = p[2], p[3]
 
-        with STATE_LOCK:
-            try: deck = load_deck(deck_id)
-            except DeckError as err: return self.send_json(404, {"error": str(err)})
-            items = deck.get("items", [])
-            if action == "decide":
-                item_id, act_id = payload.get("item_id"), payload.get("action")
-                target = next((it for it in items if it.get("id") == item_id), None)
-                if not target: return self.send_json(404, {"error": "item_not_found"})
-                valid = [a.get("id") for a in resolve_item_actions(deck.get("default_actions", []), target)]
-                if act_id not in valid: return self.send_json(400, {"error": "invalid_action", "valid": valid})
-                if target.get("status") == "decided":
-                    # Never overwrite a decision silently (second tab, agent, retry). Same action = idempotent.
-                    if target.get("chosen_action") == act_id:
-                        return self.send_json(200, {"ok": True, **find_deck_state(deck)})
-                    return self.send_json(409, {"error": "already_decided", "chosen_action": target.get("chosen_action")})
-                raw_c = payload.get("comment")
-                clean_c = raw_c.strip() if isinstance(raw_c, str) and raw_c.strip() else None
-                next_seq = max((it.get("decided_seq") or 0 for it in items), default=0) + 1
-                target.update({"status": "decided", "chosen_action": act_id, "decided_at": utc_now_iso(),
-                               "decided_seq": next_seq, "comment": clean_c})
-            elif action == "undo":
-                target_id = payload.get("item_id")
-                decided = [it for it in items if it.get("status") == "decided"]
-                if not decided: return self.send_json(409, {"error": "no_decision_to_undo"})
-                if target_id:
-                    target = next((it for it in decided if it.get("id") == target_id), None)
+        try:
+            with deck_lock():
+                try: deck = load_deck(deck_id)
+                except DeckError as err: return self.send_json(404, {"error": str(err)})
+                items = deck.get("items", [])
+                if action == "decide":
+                    item_id, act_id = payload.get("item_id"), payload.get("action")
+                    target = next((it for it in items if it.get("id") == item_id), None)
                     if not target: return self.send_json(404, {"error": "item_not_found"})
-                else:
-                    # decided_at has 1 s resolution: two quick decisions tie. decided_seq breaks the tie,
-                    # and for legacy decks without it the later position in the file wins.
-                    target = max(
-                        enumerate(decided),
-                        key=lambda pair: (pair[1].get("decided_at") or "", pair[1].get("decided_seq") or 0, pair[0]),
-                    )[1]
-                target.update({"status": "pending", "chosen_action": None, "decided_at": None, "comment": None})
-                target.pop("decided_seq", None)
-            elif action == "skip":
-                idx = next((i for i, it in enumerate(items) if it.get("id") == payload.get("item_id")), None)
-                if idx is None: return self.send_json(404, {"error": "item_not_found"})
-                if items[idx].get("status") == "decided": return self.send_json(409, {"error": "already_decided"})
-                items.append(items.pop(idx))
-            else: return self.send_json(404, {"error": f"action_inconnue_{action}"})
-            save_deck(deck_id, deck)
-            return self.send_json(200, {"ok": True, **find_deck_state(deck)})
+                    valid = [a.get("id") for a in resolve_item_actions(deck.get("default_actions", []), target)]
+                    if act_id not in valid: return self.send_json(400, {"error": "invalid_action", "valid": valid})
+                    if target.get("status") == "decided":
+                        # Never overwrite a decision silently (second tab, agent, retry). Same action = idempotent.
+                        if target.get("chosen_action") == act_id:
+                            return self.send_json(200, {"ok": True, **find_deck_state(deck)})
+                        return self.send_json(409, {"error": "already_decided", "chosen_action": target.get("chosen_action")})
+                    raw_c = payload.get("comment")
+                    clean_c = raw_c.strip() if isinstance(raw_c, str) and raw_c.strip() else None
+                    next_seq = max((it.get("decided_seq") or 0 for it in items), default=0) + 1
+                    target.update({"status": "decided", "chosen_action": act_id, "decided_at": utc_now_iso(),
+                                   "decided_seq": next_seq, "comment": clean_c})
+                elif action == "undo":
+                    target_id = payload.get("item_id")
+                    decided = [it for it in items if it.get("status") == "decided"]
+                    if not decided: return self.send_json(409, {"error": "no_decision_to_undo"})
+                    if target_id:
+                        target = next((it for it in decided if it.get("id") == target_id), None)
+                        if not target: return self.send_json(404, {"error": "item_not_found"})
+                    else:
+                        # decided_at has 1 s resolution: two quick decisions tie. decided_seq breaks the tie,
+                        # and for legacy decks without it the later position in the file wins.
+                        target = max(
+                            enumerate(decided),
+                            key=lambda pair: (pair[1].get("decided_at") or "", pair[1].get("decided_seq") or 0, pair[0]),
+                        )[1]
+                    target.update({"status": "pending", "chosen_action": None, "decided_at": None, "comment": None})
+                    target.pop("decided_seq", None)
+                elif action == "skip":
+                    idx = next((i for i, it in enumerate(items) if it.get("id") == payload.get("item_id")), None)
+                    if idx is None: return self.send_json(404, {"error": "item_not_found"})
+                    if items[idx].get("status") == "decided": return self.send_json(409, {"error": "already_decided"})
+                    items.append(items.pop(idx))
+                else: return self.send_json(404, {"error": f"action_inconnue_{action}"})
+                save_deck(deck_id, deck)
+                return self.send_json(200, {"ok": True, **find_deck_state(deck)})
+        except StorageError as err:
+            return self._storage_error(err)
 
 
 def set_decks_dir(path):

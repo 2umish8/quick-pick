@@ -8,12 +8,16 @@ from deck_store import (
     ACTION_TEMPLATES,
     DeckError,
     DeckExistsError,
+    StorageError,
     deck_exists,
+    deck_lock,
     delete_deck,
     find_deck_state,
     list_available_decks,
+    list_history,
     load_deck,
     reset_deck,
+    restore_deck,
     save_deck,
     seed_example_decks,
 )
@@ -105,7 +109,11 @@ def handle_create(args):
         guidelines=getattr(args, "guidelines", "") or "",
         custom_actions=custom_actions,
     )
-    save_deck(args.id, deck)
+    with deck_lock():
+        # Re-check under the lock: a concurrent create (CLI or server) must not be overwritten.
+        if deck_exists(args.id):
+            raise DeckExistsError(f"Un deck nommé '{args.id}' existe déjà (supprimez-le d'abord avec 'delete')")
+        save_deck(args.id, deck)
     print(f"Deck créé avec succès : {args.id} ({len(items)} items)")
 
 
@@ -157,6 +165,19 @@ def handle_reset(args):
 def handle_delete(args):
     delete_deck(args.id)
     print(f"Deck supprimé avec succès : {args.id}")
+
+
+def handle_history(args):
+    versions = list_history(args.id)
+    if not versions:
+        print(f"Aucune version pour le deck : {args.id}")
+    for version in versions:
+        print(version)
+
+
+def handle_restore(args):
+    deck = restore_deck(args.id, args.version)
+    print(f"Deck restauré : {args.id} depuis {args.version} ({len(deck.get('items', []))} items)")
 
 
 def resolve_api_key(args, env=None, stdin=None):
@@ -223,6 +244,15 @@ def build_parser():
     delete_p.add_argument("id", help="Identifiant du deck")
     delete_p.set_defaults(func=handle_delete)
 
+    history_p = subparsers.add_parser("history", help="Lister les copies de sécurité d'un deck (la plus récente d'abord)")
+    history_p.add_argument("id", help="Identifiant du deck")
+    history_p.set_defaults(func=handle_history)
+
+    restore_p = subparsers.add_parser("restore", help="Restaurer une version de l'historique (aussi un deck supprimé)")
+    restore_p.add_argument("id", help="Identifiant du deck")
+    restore_p.add_argument("version", help="Version listée par 'history' (sans .json)")
+    restore_p.set_defaults(func=handle_restore)
+
     clf_p = subparsers.add_parser("classifier", help="Tester la connexion à un classifieur externe")
     clf_p.add_argument("--endpoint", required=True, help="URL de l'endpoint du classifieur")
     clf_p.add_argument("--api-key", default="", help="[Déprécié] Clé API / Bearer Token — préférez QUICK_PICK_API_KEY ou --api-key-stdin")
@@ -238,7 +268,7 @@ def main():
     seed_example_decks()
     try:
         args.func(args)
-    except (DeckError, json.JSONDecodeError, OSError) as err:
+    except (DeckError, StorageError, json.JSONDecodeError, OSError) as err:
         print(f"Erreur quick-pick CLI : {err}", file=sys.stderr)
         sys.exit(1)
 
