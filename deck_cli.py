@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from deck_store import (
     ACTION_TEMPLATES,
     DeckError,
@@ -19,10 +20,11 @@ from deck_store import (
     reset_deck,
     restore_deck,
     save_deck,
-    seed_example_decks,
 )
 from deck_summary import compute_deck_summary
 
+WAIT_POLL_S = 2
+WAIT_TIMEOUT_EXIT_CODE = 3
 API_KEY_ENV_VAR = "QUICK_PICK_API_KEY"
 LEGACY_API_KEY_WARNING = (
     f"Avertissement : --api-key expose la clé dans ps et l'historique du shell. "
@@ -137,12 +139,12 @@ def handle_summary(args):
             "",
             f"- **Deck ID** : `{summary.get('deck_id')}`",
             f"- **Progression** : {summary.get('total_decided')}/{summary.get('total_items')} décidés",
-            f"- **Temps total** : {summary.get('elapsed_seconds')}s",
+            f"- **Temps actif** : {summary.get('active_seconds')}s",
             "",
             "## Répartition des choix",
         ]
-        for act_id, count in summary.get("actions_breakdown", {}).items():
-            lines.append(f"- **{act_id}** : {count}")
+        for row in summary.get("actions_breakdown_labeled", []):
+            lines.append(f"- **{row['label']}** : {row['count']}")
         lines.append("")
         lines.append("## Détail des décisions")
         entries = summary.get("entries", [])
@@ -165,6 +167,30 @@ def handle_reset(args):
 def handle_delete(args):
     delete_deck(args.id)
     print(f"Deck supprimé avec succès : {args.id}")
+
+
+def handle_wait(args):
+    """Sort 0 quand le deck est terminé, 3 au délai (une ligne JSON dans les deux cas), 1 si absent."""
+    if args.timeout < 0:
+        raise DeckError("--timeout doit être supérieur ou égal à 0")
+    deadline = time.monotonic() + args.timeout
+    while True:
+        state = find_deck_state(load_deck(args.id))  # DeckError (absent, disparu) -> exit 1 via main()
+        decided = state["decided_count"]
+        line = json.dumps({
+            "deck_id": args.id,
+            "is_completed": state["is_completed"],
+            "decided": decided,
+            "total": decided + state["pending_count"],
+        }, ensure_ascii=False)
+        if state["is_completed"]:
+            print(line)
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            print(line)
+            sys.exit(WAIT_TIMEOUT_EXIT_CODE)
+        time.sleep(min(WAIT_POLL_S, remaining))
 
 
 def handle_history(args):
@@ -244,6 +270,11 @@ def build_parser():
     delete_p.add_argument("id", help="Identifiant du deck")
     delete_p.set_defaults(func=handle_delete)
 
+    wait_p = subparsers.add_parser("wait", help="Attendre qu'un deck soit terminé (0 terminé, 3 délai, 1 absent)")
+    wait_p.add_argument("id", help="Identifiant du deck")
+    wait_p.add_argument("--timeout", type=float, default=120, help="Délai maximal en secondes (défaut 120)")
+    wait_p.set_defaults(func=handle_wait)
+
     history_p = subparsers.add_parser("history", help="Lister les copies de sécurité d'un deck (la plus récente d'abord)")
     history_p.add_argument("id", help="Identifiant du deck")
     history_p.set_defaults(func=handle_history)
@@ -265,7 +296,6 @@ def build_parser():
 def main():
     parser = build_parser()
     args = parser.parse_args()
-    seed_example_decks()
     try:
         args.func(args)
     except (DeckError, StorageError, json.JSONDecodeError, OSError) as err:

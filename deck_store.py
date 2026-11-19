@@ -54,7 +54,14 @@ def seed_example_decks():
 
 
 class DeckError(Exception):
-    """Erreur explicite de validation ou manipulation des decks."""
+    """Erreur explicite de validation ou manipulation des decks.
+
+    `code` (optionnel) est un identifiant stable relayé par l'API (ex. too_many_items).
+    """
+
+    def __init__(self, message="", code=None):
+        super().__init__(message)
+        self.code = code
 
 
 class StorageError(Exception):
@@ -155,8 +162,18 @@ def deck_lock():
         _PROCESS_LOCK.release()
 
 MAX_DECK_TITLE_LENGTH = 120
+MAX_DECK_DESCRIPTION_LENGTH = 500
 MAX_DECK_ITEMS = 200
 MAX_ITEM_TITLE_LENGTH = 500
+MAX_ITEM_DESCRIPTION_LENGTH = 2000
+MAX_ITEM_BULLETS = 10
+MAX_BULLET_LENGTH = 300
+CARD_LIMITS = {
+    "title": MAX_ITEM_TITLE_LENGTH,
+    "description": MAX_ITEM_DESCRIPTION_LENGTH,
+    "bullets": MAX_ITEM_BULLETS,
+    "bullet": MAX_BULLET_LENGTH,
+}
 
 # Modèles d'actions déclaratifs, cohérents avec SKILL.md et deck_cli.
 ACTION_TEMPLATES = {
@@ -195,6 +212,8 @@ def load_deck(deck_id):
             deck_data = json.load(handle)
     except FileNotFoundError:
         raise DeckError(f"Deck introuvable : {deck_id}")
+    except (OSError, ValueError) as err:  # ValueError : JSONDecodeError et UnicodeDecodeError
+        raise DeckError(f"Deck illisible : {deck_id} ({err})")
     if not isinstance(deck_data, dict):
         raise DeckError(f"Format de deck invalide : {deck_id}")
     validate_items(deck_data.get("items"), deck_id)
@@ -246,13 +265,76 @@ def _unique_deck_id(base_id):
     return candidate
 
 
-def validate_new_deck(title, items, template="triage", deck_id=None):
+def _clean_limited_text(value, label, max_length):
+    """Texte optionnel : None -> "", sinon chaîne retirée des espaces et bornée (jamais de troncature)."""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise DeckError(f"{label} invalide (texte attendu)")
+    clean = value.strip()
+    if len(clean) > max_length:
+        raise DeckError(f"{label} trop longue (max {max_length} caractères)")
+    return clean
+
+
+def normalize_card(raw, position, limits=None):
+    """Normalise une carte brute (chaîne ou objet) ; renvoie None pour une ligne vide (à sauter).
+
+    Liste blanche : seuls title, description et bullets d'un objet sont lus (status, chosen_action,
+    actions... sont ignorés). Aucun `id` n'est produit : l'appelant l'attribue.
+    """
+    limits = limits or CARD_LIMITS
+    if isinstance(raw, str):
+        if not raw.strip():
+            return None  # ligne vide : sautée
+        raw = {"title": raw}
+    elif not isinstance(raw, dict):
+        raise DeckError(f"Carte #{position} : format invalide")
+    title = raw.get("title")
+    if title is not None and not isinstance(title, str):
+        raise DeckError(f"Carte #{position} : format invalide")
+    title = (title or "").strip()
+    if not title:
+        raise DeckError(f"Carte #{position} : titre obligatoire")
+    if len(title) > limits["title"]:
+        raise DeckError(f"Carte #{position} trop longue (max {limits['title']} caractères)")
+    description = _clean_limited_text(raw.get("description"), f"Carte #{position} : description", limits["description"])
+    bullets_raw = raw.get("bullets")
+    if bullets_raw is None:
+        bullets_raw = []
+    if not isinstance(bullets_raw, list):
+        raise DeckError(f"Carte #{position} : bullets doit être une liste")
+    if len(bullets_raw) > limits["bullets"]:
+        raise DeckError(f"Carte #{position} : {limits['bullets']} bullets au maximum")
+    bullets = []
+    for bullet in bullets_raw:
+        text = str(bullet).strip()
+        if len(text) > limits["bullet"]:
+            raise DeckError(f"Carte #{position} : bullet trop long (max {limits['bullet']} caractères)")
+        if text:
+            bullets.append(text)
+    return {
+        "title": title,
+        "description": description,
+        "bullets": bullets,
+        "status": "pending",
+        "chosen_action": None,
+        "decided_at": None,
+    }
+
+
+def _too_many_items():
+    return DeckError(f"Maximum {MAX_DECK_ITEMS} cartes par deck", code="too_many_items")
+
+
+def validate_new_deck(title, items, template="triage", deck_id=None, description=None):
     """Validations pures (sans disque, sans verrou). Renvoie (titre, cartes, id demandé ou None)."""
     clean_title = str(title or "").strip()
     if not clean_title:
         raise DeckError("Titre de deck obligatoire")
     if len(clean_title) > MAX_DECK_TITLE_LENGTH:
         raise DeckError(f"Titre trop long (max {MAX_DECK_TITLE_LENGTH} caractères)")
+    _clean_limited_text(description, "Description", MAX_DECK_DESCRIPTION_LENGTH)
     if not isinstance(template, str) or template not in ACTION_TEMPLATES:
         raise DeckError(f"Modèle d'actions inconnu : {template!r}")
     if not isinstance(items, list):
@@ -260,16 +342,13 @@ def validate_new_deck(title, items, template="triage", deck_id=None):
 
     cards = []
     for position, raw in enumerate(items, start=1):
-        line = str(raw or "").strip()
-        if not line:
-            continue
-        if len(line) > MAX_ITEM_TITLE_LENGTH:
-            raise DeckError(f"Carte #{position} trop longue (max {MAX_ITEM_TITLE_LENGTH} caractères)")
-        cards.append(line)
+        card = normalize_card(raw, position)
+        if card is not None:
+            cards.append(card)
     if not cards:
         raise DeckError("Ajoutez au moins une carte à trancher")
     if len(cards) > MAX_DECK_ITEMS:
-        raise DeckError(f"Maximum {MAX_DECK_ITEMS} cartes par deck")
+        raise _too_many_items()
 
     requested_id = None
     if deck_id is not None and str(deck_id).strip():
@@ -278,9 +357,10 @@ def validate_new_deck(title, items, template="triage", deck_id=None):
     return clean_title, cards, requested_id
 
 
-def create_deck(title, items, template="triage", deck_id=None):
-    """Crée et persiste un deck depuis une liste brute (une ligne = une carte)."""
-    clean_title, cards, requested_id = validate_new_deck(title, items, template, deck_id)
+def create_deck(title, items, template="triage", deck_id=None, description=None):
+    """Crée et persiste un deck depuis une liste brute (une ligne ou un objet par carte)."""
+    clean_title, cards, requested_id = validate_new_deck(title, items, template, deck_id, description)
+    clean_description = _clean_limited_text(description, "Description", MAX_DECK_DESCRIPTION_LENGTH)
     with deck_lock():
         if requested_id is not None:
             target_id = requested_id
@@ -291,13 +371,10 @@ def create_deck(title, items, template="triage", deck_id=None):
         deck = {
             "id": target_id,
             "title": clean_title,
-            "description": "",
+            "description": clean_description,
             "category": "GÉNÉRAL",
             "default_actions": ACTION_TEMPLATES[template],
-            "items": [
-                {"id": f"item-{index}", "title": line, "status": "pending", "chosen_action": None, "decided_at": None}
-                for index, line in enumerate(cards, start=1)
-            ],
+            "items": [dict(card, id=f"item-{index}") for index, card in enumerate(cards, start=1)],
         }
         save_deck(target_id, deck)
     return deck
@@ -400,6 +477,65 @@ def reset_deck(deck_id):
     return deck
 
 
+def add_items(deck_id, raw_items):
+    """Ajoute des cartes (chaînes ou objets) à un deck existant, après instantané. Renvoie le deck."""
+    with deck_lock():
+        deck = load_deck(deck_id)
+        if not isinstance(raw_items, list) or not raw_items:
+            raise DeckError("Aucune carte à ajouter", code="empty_items")
+        cards = []
+        for position, raw in enumerate(raw_items, start=1):
+            card = normalize_card(raw, position)
+            if card is not None:
+                cards.append(card)
+        if not cards:
+            raise DeckError("Aucune carte à ajouter", code="empty_items")
+        items = deck.setdefault("items", [])
+        if items is None:
+            items = deck["items"] = []
+        if len(items) + len(cards) > MAX_DECK_ITEMS:
+            raise _too_many_items()
+        snapshot_deck(deck_id, "items")
+        used = {str(it.get("id")) for it in items}
+        numbers = [int(m.group(1)) for m in (re.match(r"^item-([0-9]+)$", i) for i in used) if m]
+        counter = max(numbers + [len(items)])
+        for card in cards:
+            counter += 1
+            while f"item-{counter}" in used:
+                counter += 1
+            card_id = f"item-{counter}"
+            used.add(card_id)
+            items.append(dict(card, id=card_id))
+        save_deck(deck_id, deck)
+    return deck
+
+
+def parse_decision_timestamp(value):
+    """Parse a decision timestamp; naive values are assumed to be UTC, junk is dropped."""
+    try:
+        parsed = datetime.datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=datetime.timezone.utc)
+
+
+def deck_progress(deck):
+    """Avancement calculé (jamais stocké) d'un deck déjà validé par validate_items.
+
+    is_completed : tous décidés (vrai pour un deck vide). completed_at : plus grand decided_at
+    analysable (ISO UTC) quand le deck est terminé, sinon None.
+    """
+    items = deck.get("items") or []
+    decided = [it for it in items if it.get("status") == "decided"]
+    is_completed = len(decided) == len(items)
+    completed_at = None
+    if is_completed:
+        stamps = [s for s in (parse_decision_timestamp(it.get("decided_at")) for it in decided) if s is not None]
+        if stamps:
+            completed_at = max(stamps).astimezone(datetime.timezone.utc).isoformat(timespec="seconds")
+    return {"total": len(items), "decided": len(decided), "is_completed": is_completed, "completed_at": completed_at}
+
+
 def list_available_decks():
     if not os.path.isdir(DECKS_DIR):
         return []
@@ -411,15 +547,29 @@ def list_available_decks():
         try:
             with open(filepath, "r", encoding="utf-8") as handle:
                 deck = json.load(handle)
-            if isinstance(deck, dict) and deck.get("id") and deck.get("title"):
-                decks.append({
-                    "id": deck["id"],
-                    "title": deck["title"],
-                    "description": deck.get("description", ""),
-                    "category": deck.get("category", "GÉNÉRAL"),
-                })
-        except (json.JSONDecodeError, OSError) as err:
+        except (ValueError, OSError) as err:
             print(f"[quick-pick] deck_read_error file={filename} err={err}", file=sys.stderr)
+            continue
+        if not (isinstance(deck, dict) and deck.get("id") and deck.get("title")):
+            continue
+        file_id = filename[:-len(".json")]
+        entry = {
+            "id": deck["id"],
+            "title": deck["title"],
+            "description": deck.get("description", ""),
+            "category": deck.get("category", "GÉNÉRAL"),
+            "invalid": False,
+        }
+        try:
+            if deck["id"] != file_id or not DECK_ID_REGEX.match(file_id):
+                raise DeckError(f"Identifiant incohérent avec le nom de fichier : {file_id}")
+            validate_items(deck.get("items"), file_id)
+            progress = deck_progress(deck)
+            entry.update(total=progress["total"], decided=progress["decided"], is_completed=progress["is_completed"])
+        except DeckError:
+            # Never expose the inner id of a broken deck: actions (delete) must hit this very file.
+            entry.update(id=file_id, invalid=True, total=None, decided=None, is_completed=False)
+        decks.append(entry)
     return decks
 
 
@@ -452,6 +602,7 @@ def prepare_item_payload(deck, item):
 def find_deck_state(deck):
     items = deck.get("items", [])
     default_actions = deck.get("default_actions", [])
+    progress = deck_progress(deck)
     pending = [it for it in items if it.get("status") != "decided"]
     decided = [it for it in items if it.get("status") == "decided"]
 
@@ -480,7 +631,8 @@ def find_deck_state(deck):
         "description": deck.get("description", ""),
         "category": deck.get("category", ""),
         "guidelines": deck.get("guidelines", ""),
-        "is_completed": current_item is None,
+        "is_completed": progress["is_completed"],
+        "completed_at": progress["completed_at"],
         "current_item": current_item,
         "upcoming_items": upcoming_items,
         "pending_items": pending_list,

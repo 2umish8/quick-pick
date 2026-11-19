@@ -65,16 +65,17 @@ class QuickPickServerTests(unittest.TestCase):
         shutil.rmtree(self.temp_dir)
 
     def test_list_available_decks_has_no_stress_counters(self):
+        # Décision de Mischael (2026-11-19) : « N/M décidés » est voulu ; aucun autre compteur.
         decks = server.list_available_decks()
         self.assertEqual(len(decks), 1)
         deck = decks[0]
         self.assertEqual(deck["id"], "test-deck")
         self.assertEqual(deck["title"], "Deck de Test")
-        # Vérification stricte : aucun compteur anxiogène
-        self.assertNotIn("total", deck)
-        self.assertNotIn("remaining", deck)
-        self.assertNotIn("count", deck)
-        self.assertNotIn("progress", deck)
+        self.assertEqual(deck["total"], 2)
+        self.assertEqual(deck["decided"], 0)
+        self.assertFalse(deck["is_completed"])
+        for forbidden in ("remaining", "count", "progress"):
+            self.assertNotIn(forbidden, deck)
 
     def test_find_deck_state_and_actions_resolution(self):
         deck = server.load_deck("test-deck")
@@ -599,3 +600,228 @@ class DeckCreationApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeckManagementApiTests(unittest.TestCase):
+    """Routes POST /api/decks/<id>/{reset,delete,items} sur un vrai serveur HTTP éphémère."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.decks_dir = os.path.join(self.temp_dir, "decks")
+        os.makedirs(self.decks_dir, exist_ok=True)
+        self.assertTrue(self.decks_dir.startswith(os.path.abspath(tempfile.gettempdir())))
+        self.original_decks_dir = deck_store.DECKS_DIR
+        deck_store.set_decks_dir(self.decks_dir)
+        self.write("alpha", [
+            {"id": "item-1", "title": "Un", "status": "pending"},
+            {"id": "item-2", "title": "Deux", "status": "pending"},
+        ])
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.QuickPickHandler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        deck_store.set_decks_dir(self.original_decks_dir)
+        shutil.rmtree(self.temp_dir)
+
+    def write(self, name, items, deck_id=None):
+        deck = {
+            "id": deck_id or name, "title": "Deck " + name,
+            "default_actions": deck_store.ACTION_TEMPLATES["binary"], "items": items,
+        }
+        with open(os.path.join(self.decks_dir, f"{name}.json"), "w", encoding="utf-8") as handle:
+            json.dump(deck, handle)
+
+    def post(self, path, payload=None, raw=None, headers=None):
+        body = raw if raw is not None else json.dumps(payload if payload is not None else {})
+        merged = {"Content-Type": "application/json"}
+        merged.update(headers or {})
+        conn = http.client.HTTPConnection("127.0.0.1", self.httpd.server_address[1], timeout=10)
+        try:
+            conn.request("POST", path, body=body, headers=merged)
+            response = conn.getresponse()
+            text = response.read().decode("utf-8")
+            return response.status, (json.loads(text) if text else {})
+        finally:
+            conn.close()
+
+    def get(self, path):
+        conn = http.client.HTTPConnection("127.0.0.1", self.httpd.server_address[1], timeout=10)
+        try:
+            conn.request("GET", path)
+            response = conn.getresponse()
+            return response.status, json.loads(response.read().decode("utf-8") or "{}")
+        finally:
+            conn.close()
+
+    # --- contrôles communs, dans l'ordre du plan ---
+    def test_common_checks_for_every_new_route(self):
+        for action in ("reset", "delete", "items"):
+            path = f"/api/decks/alpha/{action}"
+            with self.subTest(action=action):
+                self.assertEqual(self.post(path, headers={"Origin": "http://evil.example"})[0], 403)
+                self.assertEqual(self.post(path, headers={"Content-Type": "text/plain"})[0], 415)
+                status, data = self.post(path, raw="{pas du json")
+                self.assertEqual((status, data["error"]), (400, "invalid_json"))
+                self.assertEqual(self.post(f"/api/decks/inconnu/{action}", {"items": ["a"]})[0], 404)
+        self.assertEqual(len(deck_store.load_deck("alpha")["items"]), 2)  # rien n'a bougé
+        self.assertEqual(deck_store.list_history("alpha"), [])
+
+    def test_unknown_deck_wins_over_a_bad_payload(self):
+        self.assertEqual(self.post("/api/decks/inconnu/items", {"items": []})[0], 404)
+
+    def test_extra_path_segment_is_404(self):
+        for action in ("reset", "delete", "items"):
+            self.assertEqual(self.post(f"/api/decks/alpha/{action}/y", {"items": ["a"]})[0], 404)
+        self.assertTrue(os.path.isfile(os.path.join(self.decks_dir, "alpha.json")))
+
+    # --- reset ---
+    def test_reset_returns_state_and_snapshots(self):
+        self.assertEqual(self.post("/api/decks/alpha/decide", {"item_id": "item-1", "action": "approve"})[0], 200)
+        status, data = self.post("/api/decks/alpha/reset", raw="")
+        self.assertEqual(status, 200)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["decided_count"], 0)
+        self.assertEqual(len(deck_store.list_history("alpha")), 1)
+        self.assertEqual(self.post("/api/decks/alpha/reset", {})[0], 200)  # corps vide ou {} accepté
+
+    def test_reset_of_a_deck_with_invalid_items_is_404(self):
+        self.write("bad", ["x"])
+        self.assertEqual(self.post("/api/decks/bad/reset")[0], 404)
+
+    def test_reset_of_unreadable_file_is_404(self):
+        with open(os.path.join(self.decks_dir, "junk.json"), "w", encoding="utf-8") as handle:
+            handle.write("{pas du json")
+        self.assertEqual(self.post("/api/decks/junk/reset")[0], 404)
+
+    # --- delete ---
+    def test_delete_removes_deck_and_keeps_a_copy(self):
+        status, data = self.post("/api/decks/alpha/delete")
+        self.assertEqual((status, data), (200, {"ok": True}))
+        self.assertFalse(os.path.exists(os.path.join(self.decks_dir, "alpha.json")))
+        self.assertEqual(len(deck_store.list_history("alpha")), 1)
+        self.assertEqual(self.get("/api/decks/alpha")[0], 404)
+        self.assertEqual(self.post("/api/decks/alpha/delete")[0], 404)  # déjà supprimé
+        self.assertFalse(os.path.exists(os.path.join(self.decks_dir, "alpha.json")))  # jamais recréé
+
+    def test_delete_accepts_an_unreadable_deck(self):
+        self.write("bad", ["x"])
+        self.assertEqual(self.post("/api/decks/bad/delete")[0], 200)
+        self.assertFalse(os.path.exists(os.path.join(self.decks_dir, "bad.json")))
+
+    def test_list_invalid_deck_with_foreign_inner_id_deletes_that_very_file(self):
+        self.write("fichier", [{"id": "item-1", "title": "T", "status": "pending"}], deck_id="alpha")  # id interne = alpha
+        listed = {d["id"]: d for d in self.get("/api/decks")[1]["decks"]}
+        self.assertTrue(listed["fichier"]["invalid"])
+        self.assertEqual(listed["alpha"]["total"], 2)
+        self.assertEqual(self.post("/api/decks/fichier/delete")[0], 200)
+        self.assertFalse(os.path.exists(os.path.join(self.decks_dir, "fichier.json")))
+        self.assertTrue(os.path.exists(os.path.join(self.decks_dir, "alpha.json")))  # l'autre deck est intact
+
+    # --- items ---
+    def test_items_adds_cards_and_returns_state(self):
+        status, data = self.post("/api/decks/alpha/items", {"items": ["Trois", {"title": "Quatre", "description": "d"}]})
+        self.assertEqual(status, 200)
+        self.assertEqual(data["pending_count"], 4)
+        self.assertEqual(len(deck_store.list_history("alpha")), 1)
+
+    def test_items_error_codes(self):
+        for payload in ({}, {"items": "texte"}, {"items": []}, {"items": ["  "]}):
+            status, data = self.post("/api/decks/alpha/items", payload)
+            self.assertEqual((status, data.get("code")), (400, "empty_items"), payload)
+        status, data = self.post("/api/decks/alpha/items", {"items": [{"description": "sans titre"}]})
+        self.assertEqual(status, 400)
+        self.assertIn("Carte #1", data["error"])
+        status, data = self.post("/api/decks/alpha/items", {"items": ["ok", "a" * (deck_store.MAX_ITEM_TITLE_LENGTH + 1)]})
+        self.assertEqual(status, 400)
+        self.assertIn("Carte #2 trop longue", data["error"])
+        self.assertEqual(self.post("/api/decks/alpha/items", {"items": [5]})[0], 400)
+        self.assertEqual(len(deck_store.load_deck("alpha")["items"]), 2)
+        self.assertEqual(deck_store.list_history("alpha"), [])
+
+    def test_items_limit_of_200_counts_existing_plus_added(self):
+        status, data = self.post("/api/decks/alpha/items", {"items": [f"c{i}" for i in range(198)]})
+        self.assertEqual(status, 200)
+        self.assertEqual(len(deck_store.load_deck("alpha")["items"]), 200)
+        status, data = self.post("/api/decks/alpha/items", {"items": ["de trop"]})
+        self.assertEqual((status, data["code"]), (400, "too_many_items"))
+        self.assertEqual(len(deck_store.load_deck("alpha")["items"]), 200)
+
+    def test_items_on_a_cli_deck_with_arbitrary_ids_then_decide_hits_the_right_card(self):
+        self.write("cli", [
+            {"id": "zeta", "title": "Z", "status": "pending"},
+            {"id": "item-9", "title": "N", "status": "pending"},
+            {"id": "alpha-1", "title": "A", "status": "pending"},
+        ])
+        status, data = self.post("/api/decks/cli/items", {"items": ["Neuve 1", "Neuve 2"]})
+        self.assertEqual(status, 200)
+        ids = [it["id"] for it in deck_store.load_deck("cli")["items"]]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(ids[3:], ["item-10", "item-11"])
+        # décider la carte ajoutée : tombe sur elle, pas sur une autre
+        self.assertEqual(self.post("/api/decks/cli/decide", {"item_id": "item-11", "action": "reject"})[0], 200)
+        items = {it["id"]: it for it in deck_store.load_deck("cli")["items"]}
+        self.assertEqual(items["item-11"]["status"], "decided")
+        self.assertEqual(sum(1 for it in items.values() if it["status"] == "decided"), 1)
+
+    def test_items_api_object_cannot_inject_a_decision(self):
+        self.post("/api/decks/alpha/items", {"items": [{"title": "Piège", "status": "decided", "chosen_action": "approve"}]})
+        added = deck_store.load_deck("alpha")["items"][-1]
+        self.assertEqual((added["title"], added["status"], added["chosen_action"]), ("Piège", "pending", None))
+
+    def test_items_reopens_a_completed_deck(self):
+        for item_id in ("item-1", "item-2"):
+            self.post("/api/decks/alpha/decide", {"item_id": item_id, "action": "approve"})
+        self.assertTrue(self.get("/api/decks/alpha")[1]["is_completed"])
+        status, data = self.post("/api/decks/alpha/items", {"items": ["Encore"]})
+        self.assertEqual(status, 200)
+        self.assertFalse(data["is_completed"])
+
+    # --- erreurs de stockage ---
+    def test_busy_lock_answers_503(self):
+        release, held = threading.Event(), threading.Event()
+
+        def hold():
+            with deck_store.deck_lock():
+                held.set()
+                release.wait(10)
+
+        holder = threading.Thread(target=hold, daemon=True)
+        holder.start()
+        self.assertTrue(held.wait(5))
+        try:
+            with patch.object(deck_store, "LOCK_TIMEOUT_S", 0.2):
+                for action in ("reset", "delete", "items"):
+                    status, data = self.post(f"/api/decks/alpha/{action}", {"items": ["a"]})
+                    self.assertEqual((status, data["error"]), (503, "busy"), action)
+        finally:
+            release.set()
+            holder.join(5)
+        self.assertTrue(os.path.exists(os.path.join(self.decks_dir, "alpha.json")))
+
+    def test_snapshot_failure_answers_500_and_leaves_the_deck_untouched(self):
+        deck_path = os.path.join(self.decks_dir, "alpha.json")
+        with open(deck_path, "rb") as handle:
+            before = handle.read()
+        with patch.object(deck_store, "_copy_snapshot", side_effect=OSError("disque plein")):
+            for action in ("reset", "delete", "items"):
+                status, data = self.post(f"/api/decks/alpha/{action}", {"items": ["a"]})
+                self.assertEqual((status, data["error"]), (500, "snapshot_failed"), action)
+                self.assertIn("rien n'a été modifié", data["detail"])
+        with open(deck_path, "rb") as handle:
+            self.assertEqual(handle.read(), before)
+
+    # --- création : description et cartes objet ---
+    def test_post_decks_relays_description_and_object_cards(self):
+        status, data = self.post("/api/decks", {
+            "title": "Avec desc", "description": "Contexte du deck",
+            "items": ["Simple", {"title": "Riche", "description": "<script>x</script>"}],
+        })
+        self.assertEqual(status, 201)
+        self.assertEqual(data["deck"]["description"], "Contexte du deck")
+        self.assertEqual(deck_store.load_deck(data["deck_id"])["items"][1]["description"], "<script>x</script>")
+        status, data = self.post("/api/decks", {"title": "T", "description": "d" * 501, "items": ["a"]})
+        self.assertEqual(status, 400)
+        status, data = self.post("/api/decks", {"title": "T", "items": ["a"] * 201})
+        self.assertEqual((status, data["code"]), (400, "too_many_items"))

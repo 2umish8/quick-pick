@@ -7,8 +7,9 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 import deck_store
-from deck_store import (DeckError, DeckExistsError, StorageError, create_deck, deck_lock, find_deck_state,
-                        list_available_decks, load_deck, resolve_item_actions, save_deck, validate_new_deck)
+from deck_store import (DeckError, DeckExistsError, StorageError, add_items, create_deck, deck_lock, delete_deck,
+                        find_deck_state, list_available_decks, load_deck, reset_deck, resolve_item_actions,
+                        save_deck, validate_new_deck)
 from deck_summary import compute_deck_summary
 
 BIND_HOST = os.environ.get("QUICK_PICK_HOST", "127.0.0.1")
@@ -275,6 +276,31 @@ class QuickPickHandler(BaseHTTPRequestHandler):
     def _deny(self, status, error, head_only=False):
         return self.send_json(status, {"error": error}, head_only=head_only)
 
+    @staticmethod
+    def _deck_error_body(err):
+        body = {"error": str(err)}
+        if getattr(err, "code", None):
+            body["code"] = err.code
+        return body
+
+    def _manage_deck(self, deck_id, action, payload):
+        """reset / delete / items : snapshot taken by deck_store, everything under the cross-process lock."""
+        try:
+            with deck_lock():
+                if action == "delete":
+                    try: delete_deck(deck_id)
+                    except DeckError as err: return self.send_json(404, {"error": str(err)})
+                    return self.send_json(200, {"ok": True})
+                try: load_deck(deck_id)
+                except DeckError as err: return self.send_json(404, {"error": str(err)})
+                if action == "reset":
+                    return self.send_json(200, {"ok": True, **find_deck_state(reset_deck(deck_id))})
+                try: deck = add_items(deck_id, payload.get("items"))
+                except DeckError as err: return self.send_json(400, self._deck_error_body(err))
+                return self.send_json(200, {"ok": True, **find_deck_state(deck)})
+        except StorageError as err:
+            return self._storage_error(err)
+
     def _storage_error(self, err):
         return self.send_json(err.http_status, {"error": err.code, "detail": err.detail})
 
@@ -367,11 +393,12 @@ class QuickPickHandler(BaseHTTPRequestHandler):
                 items=payload.get("items"),
                 template=payload.get("template") or "triage",
                 deck_id=payload.get("id"),
+                description=payload.get("description"),
             )
             try:
                 validate_new_deck(**create_args)
             except DeckError as err:
-                return self.send_json(400, {"error": str(err)})
+                return self.send_json(400, self._deck_error_body(err))
             try:
                 with deck_lock():
                     try:
@@ -379,10 +406,13 @@ class QuickPickHandler(BaseHTTPRequestHandler):
                     except DeckExistsError as err:
                         return self.send_json(409, {"error": str(err)})
                     except DeckError as err:
-                        return self.send_json(400, {"error": str(err)})
+                        return self.send_json(400, self._deck_error_body(err))
                     return self.send_json(201, {"ok": True, "deck_id": deck["id"], "deck": find_deck_state(deck)})
             except StorageError as err:
                 return self._storage_error(err)
+
+        if len(p) == 4 and p[0] == "api" and p[1] == "decks" and p[3] in ("reset", "delete", "items"):
+            return self._manage_deck(p[2], p[3], payload)
 
         if len(p) < 4 or p[0] != "api" or p[1] != "decks": return self.send_json(404, {"error": "not_found"})
         deck_id, action = p[2], p[3]

@@ -1,14 +1,7 @@
-from datetime import datetime, timezone
-from deck_store import resolve_item_actions
+from deck_store import deck_progress, parse_decision_timestamp, resolve_item_actions
 
-
-def parse_decision_timestamp(value):
-    """Parse a decision timestamp; naive values are assumed to be UTC, junk is dropped."""
-    try:
-        parsed = datetime.fromisoformat(value)
-    except (TypeError, ValueError):
-        return None
-    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+# Un écart plus long entre deux décisions est une pause, pas du temps de travail.
+ACTIVE_GAP_CAP_S = 120
 
 
 def compute_deck_summary(deck):
@@ -47,6 +40,20 @@ def compute_deck_summary(deck):
     elif len(stamps) == 1:
         elapsed_seconds = 1
 
+    active_seconds = 0
+    ordered = sorted(stamps)
+    for earlier, later in zip(ordered, ordered[1:]):
+        active_seconds += max(0, min(int((later - earlier).total_seconds()), ACTIVE_GAP_CAP_S))
+
+    breakdown_labeled = []
+    seen = {}
+    for entry in recap_entries:
+        act_id = entry["chosen_action"]
+        if act_id not in seen:
+            seen[act_id] = {"id": act_id, "label": "Sans action" if act_id is None else entry["action_label"], "count": 0}
+            breakdown_labeled.append(seen[act_id])
+        seen[act_id]["count"] += 1
+
     return {
         "deck_id": deck.get("id"),
         "title": deck.get("title"),
@@ -56,5 +63,8 @@ def compute_deck_summary(deck):
         "is_completed": len(items) > 0 and len(decided_items) == len(items),
         "actions_breakdown": actions_count,
         "elapsed_seconds": elapsed_seconds,
+        "active_seconds": active_seconds,
+        "completed_at": deck_progress(deck)["completed_at"],
+        "actions_breakdown_labeled": breakdown_labeled,
         "entries": recap_entries,
     }

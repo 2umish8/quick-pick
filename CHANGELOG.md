@@ -1,5 +1,17 @@
 # CHANGELOG Quick-Pick
 
+## Non publié
+
+### Nouveautés
+- Routes `POST /api/decks/<id>/reset`, `/delete` et `/items` (ajout de cartes, 200 par deck au plus), avec copie de sécurité préalable ; `POST /api/decks` accepte une `description` et des cartes sous forme d'objet (`title`, `description`, `bullets`).
+- La liste des decks donne `total`, `decided`, `is_completed` et `invalid` (deck illisible, identifié par son nom de fichier).
+- Synthèse : `active_seconds` (temps actif, pauses de plus de 2 minutes plafonnées), `completed_at`, `actions_breakdown_labeled` ; le Markdown du CLI affiche « Temps actif » et les libellés d'action au lieu des identifiants.
+- CLI : `deck_cli wait <id> [--timeout N]` (code 0 terminé, 3 délai, 1 deck absent).
+
+### Corrections
+- Le CLI ne re-sème plus les decks d'exemple après une suppression.
+- Un deck supprimé pendant une lecture répond 404 au lieu de 500 ; un fichier au JSON cassé lève une erreur de deck.
+
 ## 2.1.0 — 2026-10-11
 
 ### Nouveautés

@@ -184,6 +184,7 @@ Quick-Pick résout le problème du **« mur de texte »** dans les chats avec le
    python3 deck_cli.py summary pr-review --format md
    ```
    L'agent récupère les arbitrages et les commentaires, puis reprend son travail de façon asynchrone, sans bloquer la conversation.
+   Pour savoir quand l'humain a fini, l'agent lance `python3 deck_cli.py wait pr-review --timeout 120` en boucle (voir plus bas) : code `0` = terminé, `3` = délai écoulé, `1` = deck absent.
 4. **Skill agent** : le fichier [`skills/quick-pick/SKILL.md`](skills/quick-pick/SKILL.md) s'importe directement dans votre environnement d'agents (`~/.agents/skills/quick-pick/`).
 
 ## Ligne de commande (`deck_cli.py`)
@@ -215,13 +216,29 @@ python3 deck_cli.py summary sprint-42 --format md
 # 5. Réinitialiser un deck
 python3 deck_cli.py reset sprint-42
 
-# 6. Supprimer un deck
+# 6. Supprimer un deck (une copie reste dans <dossier des decks>/.history/)
 python3 deck_cli.py delete sprint-42
 
-# 7. Tester un classifieur externe (ne jamais passer la clé en argument)
+# 7. Attendre que l'humain ait tranché toutes les cartes (sondage toutes les 2 s).
+#    Affiche une ligne JSON {deck_id, is_completed, decided, total}.
+#    Code 0 = terminé, 3 = délai écoulé (120 s par défaut), 1 = deck absent ou erreur de stockage.
+#    La durée d'un appel d'outil est bornée : utiliser un --timeout court, relancer en boucle, puis lire la synthèse.
+#    Un deck vide est considéré terminé (code 0 aussitôt).
+python3 deck_cli.py wait sprint-42 --timeout 60
+
+# 8. Sauvegardes : remise à zéro, suppression, ajout de cartes et restauration copient d'abord
+#    le deck dans <dossier des decks>/.history/<id>/ (les 10 plus récentes sont gardées).
+python3 deck_cli.py history sprint-42              # versions, la plus récente d'abord
+python3 deck_cli.py restore sprint-42 <version>    # ramène aussi un deck supprimé
+
+# 9. Tester un classifieur externe (ne jamais passer la clé en argument)
 echo "$MY_KEY" | python3 deck_cli.py classifier --endpoint https://api.openai.com/v1 --api-key-stdin
 QUICK_PICK_API_KEY="$MY_KEY" python3 deck_cli.py classifier --endpoint https://api.openai.com/v1
 ```
+
+L'interface web propose la même gestion via `POST /api/decks/<id>/reset`, `POST /api/decks/<id>/delete` et `POST /api/decks/<id>/items` (`{"items": ["une ligne", {"title": "...", "description": "...", "bullets": ["..."]}]}` ; 200 cartes par deck au plus). Chacune fait d'abord une copie de sécurité : un clic malheureux se rattrape. **Qui restaure :** l'humain ne tape aucune commande, il demande à l'agent, qui lance `deck_cli.py history` puis `restore`.
+
+Le CLI ne sème plus les decks d'exemple (seul le serveur le fait, sur un dossier de decks vide). La synthèse donne le « Temps actif » (`active_seconds` : un écart de plus de 2 minutes entre deux décisions compte comme une pause), `completed_at` et une ventilation avec libellés (`actions_breakdown_labeled`).
 
 > `--api-key` reste accepté pour compatibilité mais affiche un avertissement : la clé serait visible dans `ps` et dans l'historique du shell. Préférez `--api-key-stdin` ou `QUICK_PICK_API_KEY`.
 

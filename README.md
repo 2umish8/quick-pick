@@ -186,6 +186,7 @@ Quick-Pick solves the **"wall of text"** problem in LLM chats (Hermes, Claude, C
    python3 deck_cli.py summary pr-review --format md
    ```
    The agent gets the decisions and comments and resumes its work asynchronously, without blocking the conversation.
+   To know when the human is done, run `python3 deck_cli.py wait pr-review --timeout 120` in a loop (see below): exit `0` = finished, `3` = timed out, `1` = deck missing.
 4. **Agent skill**: [`skills/quick-pick/SKILL.md`](skills/quick-pick/SKILL.md) can be dropped into your agent environment (`~/.agents/skills/quick-pick/`).
 
 ## Command line (`deck_cli.py`)
@@ -217,13 +218,29 @@ python3 deck_cli.py summary sprint-42 --format md
 # 5. Reset a deck
 python3 deck_cli.py reset sprint-42
 
-# 6. Delete a deck
+# 6. Delete a deck (a copy is kept in <decks dir>/.history/)
 python3 deck_cli.py delete sprint-42
 
-# 7. Test an external classifier (never pass the key as an argument)
+# 7. Wait until the human has decided every card (polls every 2 s).
+#    Prints one JSON line {deck_id, is_completed, decided, total}.
+#    Exit 0 = finished, 3 = timeout (default 120 s), 1 = deck missing or storage error.
+#    A tool call is time-limited: use a short --timeout and re-run it in a loop, then read the summary.
+#    An empty deck counts as finished (exit 0 at once).
+python3 deck_cli.py wait sprint-42 --timeout 60
+
+# 8. Backups: reset, delete, adding cards and restore first copy the deck to
+#    <decks dir>/.history/<id>/ (the 10 most recent are kept).
+python3 deck_cli.py history sprint-42              # versions, most recent first
+python3 deck_cli.py restore sprint-42 <version>    # also brings back a deleted deck
+
+# 9. Test an external classifier (never pass the key as an argument)
 echo "$MY_KEY" | python3 deck_cli.py classifier --endpoint https://api.openai.com/v1 --api-key-stdin
 QUICK_PICK_API_KEY="$MY_KEY" python3 deck_cli.py classifier --endpoint https://api.openai.com/v1
 ```
+
+The web UI offers the same management through `POST /api/decks/<id>/reset`, `POST /api/decks/<id>/delete` and `POST /api/decks/<id>/items` (`{"items": ["one line", {"title": "...", "description": "...", "bullets": ["..."]}]}`; 200 cards per deck at most). Each one takes a backup first, so a mistaken click is recoverable. **Who restores:** the human does not run commands: ask the agent, which runs `deck_cli.py history` then `restore`.
+
+The CLI no longer seeds the example decks (only the server does, on an empty decks folder). The summary reports "Temps actif" (`active_seconds`: gaps between decisions longer than 2 minutes count as a pause), `completed_at` and a labelled `actions_breakdown_labeled`.
 
 > `--api-key` is still accepted for compatibility but prints a warning: the key would be visible in `ps` and in your shell history. Prefer `--api-key-stdin` or `QUICK_PICK_API_KEY`.
 

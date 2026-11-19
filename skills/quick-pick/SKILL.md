@@ -119,13 +119,27 @@ L'utilisateur peut trancher :
 ```bash
 python3 deck_cli.py status mon-arbitrage
 ```
-Retourne l'objet d'état avec `is_completed: true|false`, `pending_count` et `decided_count`.
+Retourne l'objet d'état avec `is_completed: true|false`, `pending_count`, `decided_count` et `completed_at` (date de la dernière décision une fois terminé).
+
+### Attendre la fin sans deviner
+```bash
+python3 deck_cli.py wait mon-arbitrage --timeout 60
+```
+Sonde toutes les 2 s et affiche une ligne JSON `{deck_id, is_completed, decided, total}`. Code de sortie **0** = terminé, **3** = délai écoulé (rien d'anormal : relancer), **1** = deck absent ou erreur de stockage. La durée d'un appel d'outil est bornée : garder un `--timeout` court (≈ 60 s), relancer `wait` en boucle, puis lire la synthèse. Un deck vide sort aussitôt avec 0.
 
 ### Lire le récapitulatif final
 ```bash
 python3 deck_cli.py summary mon-arbitrage --format md
 ```
-Retourne un rapport Markdown directement exploitable, ou en JSON brut (`--format json`).
+Retourne un rapport Markdown directement exploitable (ventilation avec libellés, « Temps actif »), ou en JSON brut (`--format json`, avec `active_seconds`, `completed_at`, `actions_breakdown_labeled`).
+
+### Sauvegardes et restauration (c'est l'agent qui restaure)
+Avant toute remise à zéro, suppression, ajout de cartes ou restauration, le deck est copié dans `<dossier des decks>/.history/<id>/` (les 10 plus récentes). L'utilisateur n'a aucune commande à taper : s'il regrette un clic, c'est l'agent qui lance :
+```bash
+python3 deck_cli.py history mon-arbitrage              # versions, la plus récente d'abord
+python3 deck_cli.py restore mon-arbitrage <version>    # aussi pour un deck supprimé
+```
+L'interface propose « Remettre à zéro », « Supprimer » et « Ajouter des cartes » (routes `POST /api/decks/<id>/reset|delete|items`). Le CLI ne sème plus les decks d'exemple.
 
 ---
 
