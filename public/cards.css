@@ -1,17 +1,37 @@
 /* Stack Réelle de Cartes Carrées Organiques */
+/* La partie tient dans l'écran. Sinon le premier scroll fait défiler la page
+   (carte carrée + boutons plus hauts que le téléphone) et le geste suivant
+   part comme une décision. */
+body:has(#view-game:not([hidden])) {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+main.stage-shell:has(#view-game:not([hidden])) {
+  min-height: 0;
+  justify-content: flex-start;
+  overflow: hidden;
+  padding-top: 8px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
 #view-game {
+  flex: 1;
+  min-height: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
 }
 
 .card-stack-container {
   position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
-  max-width: min(390px, 88vw);
-  aspect-ratio: 1 / 1;
-  margin: 16px auto 24px;
+  max-width: min(420px, 100%);
+  margin: 0 auto 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -61,6 +81,7 @@
 /* Contenu intérieur de la carte carrée */
 .card-inner {
   height: 100%;
+  min-height: 0;
   padding: 20px 18px;
   display: flex;
   flex-direction: column;
@@ -68,6 +89,7 @@
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
+.card-inner > * { flex-shrink: 0; }
 .card-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .badge-tag {
   font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
@@ -96,7 +118,7 @@
 .md-h { color: var(--text); font-weight: 800; }
 .md-quote { border-left: 2px solid var(--border-focus); padding-left: 8px; color: var(--muted); }
 .bullet-list {
-  list-style: none; display: flex; flex-direction: column; gap: 8px; margin-top: auto;
+  list-style: none; display: flex; flex-direction: column; gap: 8px; margin-top: 12px;
 }
 .bullet-item {
   position: relative; padding-left: 18px; font-size: 13.5px; line-height: 1.45; color: #E2E8F0;
@@ -108,7 +130,8 @@
 
 /* Barre de commentaire optionnel */
 .comment-bar {
-  width: 100%; max-width: min(390px, 88vw); margin-bottom: 12px;
+  width: 100%; max-width: min(420px, 100%); margin-bottom: 12px;
+  flex-shrink: 0;
 }
 .comment-input {
   width: 100%; height: 44px; background: rgba(0, 0, 0, 0.35);
@@ -121,7 +144,8 @@
 
 /* Dock Clavier Desktop */
 .kinetic-dock {
-  width: 100%; max-width: min(390px, 88vw); display: flex; gap: 10px;
+  width: 100%; max-width: min(420px, 100%); display: flex; gap: 10px;
+  flex-shrink: 0;
 }
 .action-key-button {
   flex: 1; min-height: 48px; background: rgba(255, 255, 255, 0.04);

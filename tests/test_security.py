@@ -435,6 +435,18 @@ class PinnedHTTPSTests(unittest.TestCase):
         self.assertFalse(f("http://127.0.0.1:8791", server_port=8791, host_header="localhost:8791"))
         self.assertFalse(f("http://evil.example:8791", server_port=8791, host_header="evil.example:8791"))
 
+    def test_public_name_matches_when_allowlisted(self):
+        # Derrière Caddy, le navigateur envoie Origin https://quick-pick.mowtif.com.
+        # Le Host transmis doit être ce nom public, pas le port amont.
+        with mock.patch.dict(os.environ, {"QUICK_PICK_ALLOWED_HOSTS": "quick-pick.mowtif.com"}):
+            self.assertTrue(server.is_allowed_host("quick-pick.mowtif.com"))
+            self.assertTrue(server.is_allowed_origin(
+                "https://quick-pick.mowtif.com",
+                host_header="quick-pick.mowtif.com"))
+            self.assertFalse(server.is_allowed_origin(
+                "https://quick-pick.mowtif.com",
+                host_header="127.0.0.1:8791"))
+
     def test_origin_without_port_compared_to_server_port(self):
         self.assertFalse(server.is_allowed_origin(
             "http://localhost", server_port=8791))

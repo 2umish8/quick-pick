@@ -245,6 +245,8 @@ class QuickPickHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        if ctype.startswith("text/") or ctype.startswith("application/json") or ctype.startswith("image/svg"):
+            self.send_header("Cache-Control", "no-cache")
         self._set_security_headers()
         self.end_headers()
         if not head_only:

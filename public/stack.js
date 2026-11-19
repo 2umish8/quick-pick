@@ -132,26 +132,36 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
   }, { passive: true });
 
   cardEl.addEventListener("touchmove", e => {
-    if (!isDown || e.touches.length !== 1) return;
+    if (e.touches.length !== 1) return;
+    if (!isDown && gestureMode !== "swipe") return;
     const dx = e.touches[0].clientX - startX;
     const dy = e.touches[0].clientY - startY;
-    if (gestureMode === null && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
+    // Tant que le geste n'est pas un swipe, ne pas bouger la carte et ne pas
+    // annuler le scroll natif. Le faire avant le classement laisse la carte
+    // décalée après la première lecture, et iOS ne reprend plus le scroll.
+    if (gestureMode === null) {
+      if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
       const inner = innerEl();
       const canScroll = inner && inner.scrollHeight > inner.clientHeight + 4;
-      if (canScroll && Math.abs(dy) > Math.abs(dx)) {
+      const vertical = Math.abs(dy) > Math.abs(dx);
+      if (canScroll && vertical) {
         const atTop = inner.scrollTop <= 0;
         const atBottom = inner.scrollTop + inner.clientHeight >= inner.scrollHeight - 1;
-        const scrollBlocked = (dy > 0 && atTop) || (dy < 0 && atBottom);
-        if (!scrollBlocked) {
+        const pastEdge = (dy > 0 && atTop) || (dy < 0 && atBottom);
+        if (!pastEdge) {
           gestureMode = "scroll";
           isDown = false;
+          cardEl.style.transition = "none";
+          cardEl.style.transform = cardEl.dataset.baseTransform;
           clearEdges();
           return;
         }
       }
       gestureMode = "swipe";
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
     }
-    if (gestureMode === "scroll") return;
+    if (gestureMode !== "swipe" || !isDown) return;
     if (e.cancelable) e.preventDefault();
     onMove(e.touches[0].clientX, e.touches[0].clientY);
   }, { passive: false });
