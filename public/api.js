@@ -104,7 +104,9 @@ export function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-export async function request(endpoint, options = {}) {
+export async function request(endpoint, rawOptions = {}) {
+  // `silent` is ours, not fetch's: no 401 prompt, the caller decides what an error looks like.
+  const { silent = false, ...options } = rawOptions;
   const doFetch = (extraHeaders = {}) => fetch(endpoint, {
     // A caller-provided signal wins over the default timeout (options spread after).
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -114,7 +116,7 @@ export async function request(endpoint, options = {}) {
   });
   let response = await doFetch();
   let data = await readErrorBody(response);
-  if (response.status === 401 && data && data.error === "unauthorized") {
+  if (!silent && response.status === 401 && data && data.error === "unauthorized") {
     const token = promptForToken();
     if (!token) throw new Error(data.detail || data.error || `Erreur serveur (${response.status})`);
     response = await doFetch();
@@ -123,6 +125,7 @@ export async function request(endpoint, options = {}) {
   if (!response.ok) {
     const failure = new Error(data.detail || data.error || `Erreur serveur (${response.status})`);
     if (data.code) failure.code = data.code;
+    failure.status = response.status;
     throw failure;
   }
   return data;
@@ -155,8 +158,8 @@ export async function authFetch(url, options = {}) {
   return response;
 }
 
-export function fetchDecks() {
-  return request("/api/decks");
+export function fetchDecks(options) {
+  return request("/api/decks", options);
 }
 
 export function createDeck(draft) {
@@ -166,8 +169,8 @@ export function createDeck(draft) {
   });
 }
 
-export function fetchDeckState(deckId) {
-  return request(`/api/decks/${encodeURIComponent(deckId)}`);
+export function fetchDeckState(deckId, options) {
+  return request(`/api/decks/${encodeURIComponent(deckId)}`, options);
 }
 
 export function postDecision(deckId, itemId, actionId, comment = null) {

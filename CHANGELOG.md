@@ -7,6 +7,7 @@
 - La liste des decks donne `total`, `decided`, `is_completed` et `invalid` (deck illisible, identifié par son nom de fichier).
 - Synthèse : `active_seconds` (temps actif, pauses de plus de 2 minutes plafonnées), `completed_at`, `actions_breakdown_labeled` ; le Markdown du CLI affiche « Temps actif » et les libellés d'action au lieu des identifiants.
 - CLI : `deck_cli wait <id> [--timeout N]` (code 0 terminé, 3 délai, 1 deck absent).
+- Interface : au retour sur l'onglet, la carte courante ou la liste se met à jour en silence (sans bandeau ni demande de jeton) ; rien n'est remplacé si une note, une zone « Ajouter des cartes » ou un bouton de confirmation est en cours. La synthèse n'est pas rafraîchie.
 
 ### Corrections
 - Le CLI ne re-sème plus les decks d'exemple après une suppression.

@@ -59,6 +59,8 @@ function syncUndoVisibility() {
 // Two-step confirmation: one armed button at a time, back to normal after 4 s or on any list re-render.
 const CONFIRM_DELAY_MS = 4000;
 let armed = null;
+// Sequence counter for silent refreshes: any newer render or refresh makes an older answer stale.
+let refreshSeq = 0;
 
 function disarm() {
   if (!armed) return;
@@ -174,8 +176,18 @@ function onDeckAction(event) {
 
 dom.deckList.addEventListener("click", onDeckAction);
 
+function renderDeckList(decks) {
+  dom.deckList.innerHTML = decks.length
+    ? decks.map(deckItemHtml).join("")
+    : `<p class="deck-list-empty">Aucun deck pour l'instant. Créez le premier ci-dessous, ou posez une liste et commencez à trier.</p>`;
+  dom.deckList.querySelectorAll(".deck-item-card:not([disabled])").forEach(el => {
+    el.addEventListener("click", () => openDeck(el.dataset.deckId));
+  });
+}
+
 async function loadDecks() {
   disarm();
+  refreshSeq += 1;
   if (window.location.hash) {
     history.replaceState(null, "", window.location.pathname + window.location.search);
   }
@@ -191,13 +203,7 @@ async function loadDecks() {
     return;
   }
   hideErrorBanner();
-  const decks = data.decks || [];
-  dom.deckList.innerHTML = decks.length
-    ? decks.map(deckItemHtml).join("")
-    : `<p class="deck-list-empty">Aucun deck pour l'instant. Créez le premier ci-dessous, ou posez une liste et commencez à trier.</p>`;
-  dom.deckList.querySelectorAll(".deck-item-card:not([disabled])").forEach(el => {
-    el.addEventListener("click", () => openDeck(el.dataset.deckId));
-  });
+  renderDeckList(data.decks || []);
   switchView("decks");
 }
 
@@ -225,6 +231,7 @@ function restoreCurrentCard() {
 }
 
 function handleDeckState(deckData) {
+  refreshSeq += 1;
   hideErrorBanner();
   state.deckData = deckData;
   updateDrawerState(deckData);
@@ -515,6 +522,69 @@ window.addEventListener("hashchange", () => {
     loadDecks();
   }
 });
+
+// Retour sur l'onglet : mise à jour silencieuse (pas de bandeau, pas de prompt, un échec ne change rien).
+function panelsClosed() {
+  return !document.getElementById("deck-drawer")?.classList.contains("open")
+    && document.getElementById("settings-modal")?.hidden !== false;
+}
+
+function gameRefreshAllowed() {
+  return state.currentView === "game" && Boolean(state.activeDeckId)
+    && !state.isProcessing && panelsClosed() && !dom.commentInput.value.trim();
+}
+
+function listRefreshAllowed() {
+  return state.currentView === "decks" && !armed && !dom.deckList.querySelector(".deck-item-add:not([hidden])");
+}
+
+async function refreshOnReturn() {
+  const view = state.currentView;
+  if (view === "game") {
+    if (!gameRefreshAllowed()) return;
+    const deckId = state.activeDeckId;
+    const seq = ++refreshSeq;
+    let fresh;
+    try {
+      fresh = await fetchDeckState(deckId, { silent: true });
+    } catch (err) {
+      if (err.status === 404 && seq === refreshSeq && state.activeDeckId === deckId) loadDecks();
+      return;
+    }
+    if (seq !== refreshSeq || state.activeDeckId !== deckId || !gameRefreshAllowed()) return;
+    const cur = state.deckData;
+    const same = cur && !fresh.is_completed
+      && cur.current_item?.id === fresh.current_item?.id
+      && cur.decided_count === fresh.decided_count
+      && cur.pending_count === fresh.pending_count;
+    if (same) return;
+    handleDeckState(fresh);
+  } else if (view === "decks") {
+    if (!listRefreshAllowed()) return;
+    const seq = ++refreshSeq;
+    let data;
+    try {
+      data = await fetchDecks({ silent: true });
+    } catch {
+      return;
+    }
+    if (seq !== refreshSeq || !listRefreshAllowed()) return;
+    renderDeckList(data.decks || []);
+  }
+  // Vue synthèse : ignorée, l'affichage peut rester périmé jusqu'à une action.
+}
+
+let lastReturnAt = 0;
+function onReturn(isFocus) {
+  const now = Date.now();
+  if (isFocus && now - lastReturnAt < 1000) return;
+  lastReturnAt = now;
+  refreshOnReturn();
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") onReturn(false);
+});
+window.addEventListener("focus", () => onReturn(true));
 
 const initialDeck = getInitialDeckId();
 if (initialDeck) {
