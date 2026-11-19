@@ -65,7 +65,7 @@ class QuickPickServerTests(unittest.TestCase):
         shutil.rmtree(self.temp_dir)
 
     def test_list_available_decks_has_no_stress_counters(self):
-        # Décision de Mischael (2026-11-19) : « N/M décidés » est voulu ; aucun autre compteur.
+        # Décision du propriétaire (2026-11-19) : « N/M décidés » est voulu ; aucun autre compteur.
         decks = server.list_available_decks()
         self.assertEqual(len(decks), 1)
         deck = decks[0]
@@ -598,10 +598,6 @@ class DeckCreationApiTests(unittest.TestCase):
         self.assertEqual([it["title"] for it in deck_store.load_deck("same")["items"]], ["x"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class DeckManagementApiTests(unittest.TestCase):
     """Routes POST /api/decks/<id>/{reset,delete,items} sur un vrai serveur HTTP éphémère."""
 
@@ -825,3 +821,7 @@ class DeckManagementApiTests(unittest.TestCase):
         self.assertEqual(status, 400)
         status, data = self.post("/api/decks", {"title": "T", "items": ["a"] * 201})
         self.assertEqual((status, data["code"]), (400, "too_many_items"))
+
+
+if __name__ == "__main__":
+    unittest.main()

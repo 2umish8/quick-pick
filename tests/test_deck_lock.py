@@ -229,6 +229,48 @@ class SnapshotTest(TempDecksCase):
                 self.assertEqual(ctx.exception.code, "snapshot_failed")
                 self.assertEqual(self.deck_bytes(), before)
 
+    def test_interrupted_copy_leaves_no_partial_version(self):
+        self.make_deck("d", 2)
+        real_copy = deck_store.shutil.copyfile
+
+        def broken_copy(src, dst):
+            real_copy(src, dst)  # le temporaire existe, puis la copie « tombe » en cours de route
+            raise OSError("coupure")
+
+        with mock.patch.object(deck_store.shutil, "copyfile", side_effect=broken_copy):
+            with self.assertRaises(deck_store.SnapshotError):
+                deck_store.reset_deck("d")
+        self.assertEqual(deck_store.list_history("d"), [])
+        history = os.path.join(self.decks_dir, ".history", "d")
+        self.assertEqual(os.listdir(history) if os.path.isdir(history) else [], [])
+
+    def test_flock_unsupported_falls_back_to_process_lock_with_one_warning(self):
+        import errno
+        import io
+        self.make_deck("d", 1)
+        fake = mock.Mock(flock=mock.Mock(side_effect=OSError(errno.ENOTSUP, "nope")), LOCK_EX=2, LOCK_NB=4, LOCK_UN=8)
+        err = io.StringIO()
+        with mock.patch.object(deck_store, "fcntl", fake), mock.patch.object(deck_store, "_FLOCK_DISABLED", False), \
+                mock.patch("sys.stderr", err):
+            try:
+                for _ in range(2):
+                    with deck_store.deck_lock():
+                        pass
+                self.assertEqual(deck_store.load_deck("d")["id"], "d")
+            finally:
+                deck_store._FLOCK_DISABLED = False
+        self.assertEqual(err.getvalue().count("flock_unsupported"), 1)
+
+    @unittest.skipIf(not hasattr(os, "geteuid") or os.geteuid() == 0, "root ignore les droits de fichier")
+    def test_read_only_lock_file_still_locks(self):
+        self.make_deck("d", 1)
+        lock_path = os.path.join(self.decks_dir, deck_store.LOCK_FILENAME)
+        with open(lock_path, "a"):
+            pass
+        os.chmod(lock_path, 0o444)
+        with deck_store.deck_lock():
+            self.assertEqual(deck_store.load_deck("d")["id"], "d")
+
     def test_snapshot_of_missing_deck_is_none_and_motif_validated(self):
         self.assertIsNone(deck_store.snapshot_deck("absent", "reset"))
         self.make_deck("d", 1)
@@ -365,7 +407,7 @@ class ServerCliConcurrencyTest(TempDecksCase):
             holder.join()
 
     def test_storage_unavailable_returns_500_json(self):
-        # Verrou impossible à prendre : le serveur répond 500 JSON storage_error (reset/delete HTTP arrivent au lot 2).
+        # Verrou impossible à prendre : le serveur répond 500 JSON storage_error.
         with mock.patch.object(deck_store, "fcntl", mock.Mock(flock=mock.Mock(side_effect=OSError("io")),
                                                               LOCK_EX=2, LOCK_NB=4, LOCK_UN=8)):
             status, body = self.post("/api/decks", {"title": "N", "items": ["a"]})

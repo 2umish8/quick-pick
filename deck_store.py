@@ -1,5 +1,6 @@
 import contextlib
 import datetime
+import errno
 import json
 import os
 import re
@@ -110,6 +111,26 @@ _PROCESS_LOCK = threading.RLock()
 _LOCK_STATE = threading.local()
 
 
+_FLOCK_UNSUPPORTED = {errno.ENOLCK, errno.ENOTSUP, errno.EOPNOTSUPP}
+_FLOCK_DISABLED = False
+
+
+def _disable_flock(err):
+    """flock refusé par le système de fichiers : repli sur le verrou de processus seul (un seul avertissement)."""
+    global _FLOCK_DISABLED
+    if not _FLOCK_DISABLED:
+        _FLOCK_DISABLED = True
+        print(f"[quick-pick] flock_unsupported err={err} fallback=process_lock_only", file=sys.stderr)
+
+
+def _open_lock_file(path):
+    """Descripteur du fichier de verrou ; tolère un fichier existant en lecture seule (flock marche sans écriture)."""
+    try:
+        return os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    except PermissionError:
+        return os.open(path, os.O_RDONLY | os.O_CREAT)
+
+
 @contextlib.contextmanager
 def deck_lock():
     """Verrou exclusif sur tout le dossier des decks, ré-entrant par thread.
@@ -131,21 +152,26 @@ def deck_lock():
         raise DeckBusyError()
     handle = None
     try:
-        if fcntl is not None:
+        if fcntl is not None and not _FLOCK_DISABLED:
             try:
                 os.makedirs(DECKS_DIR, exist_ok=True)
-                handle = open(os.path.join(DECKS_DIR, LOCK_FILENAME), "a")
+                handle = _open_lock_file(os.path.join(DECKS_DIR, LOCK_FILENAME))
             except OSError as err:
                 raise LockUnavailableError(f"Stockage indisponible : {err}")
             while True:
                 try:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
                 except (BlockingIOError, PermissionError):
                     if time.monotonic() >= deadline:
                         raise DeckBusyError()
                     time.sleep(LOCK_POLL_S)
                 except OSError as err:
+                    if err.errno in _FLOCK_UNSUPPORTED:
+                        _disable_flock(err)
+                        os.close(handle)
+                        handle = None
+                        break
                     raise LockUnavailableError(f"Stockage indisponible : {err}")
         _LOCK_STATE.depth = 1
         try:
@@ -155,10 +181,10 @@ def deck_lock():
     finally:
         if handle is not None:
             try:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                fcntl.flock(handle, fcntl.LOCK_UN)
             except OSError:
                 pass
-            handle.close()
+            os.close(handle)
         _PROCESS_LOCK.release()
 
 MAX_DECK_TITLE_LENGTH = 120
@@ -216,7 +242,7 @@ def load_deck(deck_id):
         raise DeckError(f"Deck illisible : {deck_id} ({err})")
     if not isinstance(deck_data, dict):
         raise DeckError(f"Format de deck invalide : {deck_id}")
-    validate_items(deck_data.get("items"), deck_id)
+    validate_items(deck_data.get("items", []), deck_id)
     return deck_data
 
 
@@ -226,8 +252,6 @@ def validate_items(items, deck_id):
     Read-time only: nothing is rewritten on disk, a broken deck raises DeckError (4xx) instead of
     crashing the request handler (5xx).
     """
-    if items is None:
-        return
     if not isinstance(items, list):
         raise DeckError(f"Items de deck invalides : {deck_id} (tableau JSON attendu)")
     for index, item in enumerate(items):
@@ -308,7 +332,9 @@ def normalize_card(raw, position, limits=None):
         raise DeckError(f"Carte #{position} : {limits['bullets']} bullets au maximum")
     bullets = []
     for bullet in bullets_raw:
-        text = str(bullet).strip()
+        if not isinstance(bullet, str):
+            raise DeckError(f"Carte #{position} : format invalide (chaque bullet doit être du texte)")
+        text = bullet.strip()
         if len(text) > limits["bullet"]:
             raise DeckError(f"Carte #{position} : bullet trop long (max {limits['bullet']} caractères)")
         if text:
@@ -386,8 +412,18 @@ def _history_dir(deck_id):
 
 
 def _copy_snapshot(src, dst):
+    """Copie vers un temporaire (jamais un nom de version valide) puis os.replace : pas de version partielle."""
     os.makedirs(os.path.dirname(dst), exist_ok=True)
-    shutil.copyfile(src, dst)
+    tmp = dst + ".tmp"
+    try:
+        shutil.copyfile(src, tmp)
+        os.replace(tmp, dst)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def list_history(deck_id):
@@ -563,7 +599,7 @@ def list_available_decks():
         try:
             if deck["id"] != file_id or not DECK_ID_REGEX.match(file_id):
                 raise DeckError(f"Identifiant incohérent avec le nom de fichier : {file_id}")
-            validate_items(deck.get("items"), file_id)
+            validate_items(deck.get("items", []), file_id)
             progress = deck_progress(deck)
             entry.update(total=progress["total"], decided=progress["decided"], is_completed=progress["is_completed"])
         except DeckError:

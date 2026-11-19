@@ -5,7 +5,7 @@ import { renderStack, attachClassifierSuggestion } from "./stack.js";
 import { initDrawer, openDrawer, updateDrawerState } from "./deck-drawer.js";
 import { initSettingsModal, fetchItemPrediction } from "./classifier.js";
 import { initDeckForm } from "./deck-form.js";
-import { formatDecisionSummary, parseCardLine } from "./format.js";
+import { formatDecisionSummary, parseCardLines } from "./format.js";
 
 const state = { activeDeckId: null, deckData: null, isProcessing: false, currentView: "decks" };
 
@@ -123,22 +123,30 @@ async function runDeckAction(task, failureLabel) {
     await loadDecks();
   } catch (err) {
     showErrorBanner(`${failureLabel} : ${err.message}`);
+    await loadDecks();
   }
 }
 
 async function submitAddCards(item, deckId) {
   const input = item.querySelector(".deck-add-input");
   const errorEl = item.querySelector(".deck-add-error");
-  const items = input.value.split("\n").map(line => line.trim()).filter(Boolean).map(parseCardLine);
+  const items = parseCardLines(input.value);
   errorEl.textContent = "";
   if (!items.length) {
     errorEl.textContent = "Saisissez au moins une carte.";
     return;
   }
+  const addBtn = item.querySelector('[data-act="add-submit"]');
+  const setBusy = busy => {
+    input.disabled = busy;
+    if (addBtn) addBtn.disabled = busy;
+  };
+  setBusy(true);
   try {
     await postItems(deckId, items);
   } catch (err) {
     errorEl.textContent = err.code === "too_many_items" ? "Trop de cartes : 200 au maximum par deck." : err.message;
+    setBusy(false);
     return;
   }
   await loadDecks();

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { formatDecisionSummary, parseCardLine } from "../../public/format.js";
+import { formatDecisionSummary, parseCardLine, parseCardLines } from "../../public/format.js";
 
 const PUBLIC_DIR = new URL("../../public/", import.meta.url);
 const readPublic = name => readFileSync(new URL(name, PUBLIC_DIR), "utf8");
@@ -85,4 +85,13 @@ test("stack.js: touchcancel and pointercancel never validate a swipe", () => {
   assert.match(stack, /"touchcancel", \(\) => onEnd\(true\)/);
   assert.match(stack, /"pointercancel", e => finishMouse\(e, true\)/);
   assert.match(stack, /if \(cancelled\) dir = null;/);
+});
+
+test("parseCardLines: one card per non-empty trimmed line, shared by the create form and the add zone", () => {
+  assert.deepEqual(parseCardLines("  a \n\n b :: c \n   \nd"), ["a", { title: "b", description: "c" }, "d"]);
+  assert.deepEqual(parseCardLines(""), []);
+  assert.deepEqual(parseCardLines(undefined), []);
+  assert.match(readPublic("app.js"), /parseCardLines\(input\.value\)/);
+  assert.match(readPublic("deck-form.js"), /parseCardLines\(/);
+  assert.doesNotMatch(readPublic("deck-form.js") + readPublic("app.js"), /\.split\("\\n"\)/);
 });

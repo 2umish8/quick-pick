@@ -150,12 +150,18 @@ class NormalizeCardTests(unittest.TestCase):
 
     def test_whitelist_ignores_status_and_other_fields(self):
         card = deck_store.normalize_card({
-            "title": "T", "description": "D", "bullets": ["a", 2],
+            "title": "T", "description": "D", "bullets": ["a", "b"],
             "status": "decided", "chosen_action": "approve", "decided_seq": 9, "actions": [{"id": "x"}],
             "add_actions": [{"id": "y"}], "remove_actions": ["z"], "inconnu": 1, "id": "hack",
         }, 1)
-        self.assertEqual(card, {"title": "T", "description": "D", "bullets": ["a", "2"],
+        self.assertEqual(card, {"title": "T", "description": "D", "bullets": ["a", "b"],
                                 "status": "pending", "chosen_action": None, "decided_at": None})
+
+    def test_non_string_bullet_is_refused(self):
+        for bad in (2, None, {"x": 1}, ["a"]):
+            with self.subTest(bad=bad), self.assertRaises(DeckError) as ctx:
+                deck_store.normalize_card({"title": "T", "bullets": ["ok", bad]}, 1)
+            self.assertIn("format invalide", str(ctx.exception))
 
     def test_errors(self):
         bad = [
@@ -214,6 +220,14 @@ class LoadDeckErrorTests(TempDecksCase):
         self.write_deck("ok", make_deck("ok", [pending("a")]))
         with patch("builtins.open", side_effect=PermissionError("refusé")), self.assertRaises(DeckError):
             deck_store.load_deck("ok")
+
+    def test_items_null_or_not_a_list_is_a_deck_error(self):
+        for index, value in enumerate((None, "x", 3, {"a": 1})):
+            deck_id = f"nul{index}"
+            with open(os.path.join(self.decks_dir, deck_id + ".json"), "w", encoding="utf-8") as handle:
+                json.dump({"id": deck_id, "title": "T", "items": value}, handle)
+            with self.subTest(items=value), self.assertRaises(DeckError):
+                deck_store.load_deck(deck_id)
 
     def test_disappearance_between_isfile_and_open_is_a_deck_error(self):
         self.write_deck("ok", make_deck("ok", [pending("a")]))
@@ -310,6 +324,14 @@ class CliTests(TempDecksCase):
         self.assertNotIn("**reject**", out)
         self.assertIn("**Temps actif** : 40s", out)
         self.assertNotIn("Temps total", out)
+
+    def test_wait_non_finite_timeout_exits_1(self):
+        self.write_deck("w", make_deck("w", [pending("a")]))
+        for value in ("nan", "inf"):
+            with self.subTest(value=value):
+                code, _out, err = run_cli("wait", "w", "--timeout", value)
+                self.assertEqual(code, 1)
+                self.assertIn("timeout", err)
 
     def test_wait_negative_timeout_exits_1(self):
         self.write_deck("w", make_deck("w", [pending("a")]))

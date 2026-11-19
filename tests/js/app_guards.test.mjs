@@ -49,3 +49,16 @@ test("ouvrir un deck depuis un clic ou l'adresse ne laisse pas de promesse rejet
   assert.doesNotMatch(app, /addEventListener\("click", \(\) => startDeck/);
   assert.doesNotMatch(app, /onCreated: \(deckId\) => startDeck/);
 });
+
+test("Ajouter des cartes bloque le bouton et le champ pendant la requête, les rend en cas d'erreur", () => {
+  const fn = body("async function submitAddCards", "\n}\n");
+  assert.match(fn, /setBusy\(true\);\s*try \{\s*await postItems/);
+  assert.match(fn, /catch \(err\)[\s\S]*setBusy\(false\)/);
+  assert.match(fn, /input\.disabled = busy/);
+  assert.match(fn, /add-submit/);
+});
+
+test("remise à zéro et suppression rechargent la liste aussi en cas d'erreur", () => {
+  const fn = body("async function runDeckAction", "\n}\n");
+  assert.match(fn, /catch \(err\)[\s\S]*showErrorBanner[\s\S]*await loadDecks\(\)/);
+});

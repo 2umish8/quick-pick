@@ -2,6 +2,7 @@
 """quick-pick CLI — Outil d'administration et d'interfaçage agent pour les decks."""
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -171,8 +172,8 @@ def handle_delete(args):
 
 def handle_wait(args):
     """Sort 0 quand le deck est terminé, 3 au délai (une ligne JSON dans les deux cas), 1 si absent."""
-    if args.timeout < 0:
-        raise DeckError("--timeout doit être supérieur ou égal à 0")
+    if not math.isfinite(args.timeout) or args.timeout < 0:
+        raise DeckError("--timeout doit être un nombre fini supérieur ou égal à 0")
     deadline = time.monotonic() + args.timeout
     while True:
         state = find_deck_state(load_deck(args.id))  # DeckError (absent, disparu) -> exit 1 via main()

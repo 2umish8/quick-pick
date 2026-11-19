@@ -9,6 +9,11 @@ export function formatDecisionSummary(count, activeSeconds) {
   return `${n} ${noun} · ${duration}`;
 }
 
+// Textarea content -> cards: one per non-empty line, each through parseCardLine.
+export function parseCardLines(text) {
+  return String(text ?? "").split("\n").map(line => line.trim()).filter(Boolean).map(parseCardLine);
+}
+
 // One card per line. "titre :: détail" (first " :: " with spaces around) gives {title, description};
 // otherwise (no separator, or one side empty) the whole trimmed line is the title.
 export function parseCardLine(line) {
