@@ -171,6 +171,36 @@ main.stage-shell:has(#view-game:not([hidden])) {
   border: 1px solid var(--border); background: rgba(0, 0, 0, 0.4); color: var(--muted);
 }
 
+/* Libellé de l'action visée pendant le glissement (sur la carte, qui s'affirme près du seuil) */
+.swipe-hint {
+  position: absolute; z-index: 3; pointer-events: none;
+  top: 14px; max-width: 78%; width: max-content;
+  padding: 8px 14px; border-radius: var(--radius-btn);
+  font-size: 17px; font-weight: 800; line-height: 1.25;
+  background: var(--neutral-state); color: var(--on-accent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+}
+.swipe-hint.on {
+  opacity: calc(0.35 + 0.65 * var(--swipe-progress, 0));
+}
+.swipe-hint.ready { outline: 3px solid rgba(243, 244, 246, 0.55); }
+.swipe-hint.tone-success { background: var(--success); }
+.swipe-hint.tone-danger { background: var(--danger); }
+.swipe-hint.tone-warning { background: var(--warning); }
+.swipe-hint.tone-info { background: var(--info); }
+/* East: top-left of the card (the side that stays on screen); west: top-right. */
+.swipe-hint.dir-east { left: 14px; transform: translateX(calc(var(--swipe-dx, 0px) * -0.5)); }
+.swipe-hint.dir-west { right: 14px; transform: translateX(calc(var(--swipe-dx, 0px) * -0.5)); }
+.swipe-hint.dir-north, .swipe-hint.dir-south {
+  top: calc(50% - 20px); left: 0; right: 0; margin: 0 auto;
+  transform: translateY(calc(var(--swipe-dy, 0px) * -0.5));
+}
+.square-card[data-swipe="east"] { border-color: var(--success); }
+.square-card[data-swipe="west"] { border-color: var(--danger); }
+.square-card[data-swipe="north"] { border-color: var(--warning); }
+.square-card[data-swipe="south"] { border-color: var(--info); }
+
 /* Edge indicators */
 .edge-indicator {
   position: fixed; pointer-events: none; z-index: 100; opacity: 0; transition: opacity 0.15s ease;

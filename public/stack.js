@@ -2,6 +2,9 @@
 import { escapeHtml } from "./escape.js";
 
 const SWIPE_THRESHOLD = 85;
+// Below this distance the gesture is still a hesitation: no feedback yet.
+const SWIPE_FEEDBACK_MIN = 30;
+const DIRECTION_ARROWS = { east: "→", west: "←", north: "↑", south: "↓" };
 
 function getCardOrganicTransform(index, id) {
   let hash = 0;
@@ -42,6 +45,7 @@ export function renderStack(container, state, onDecide) {
         ${descriptionHtml}
         ${bullets ? `<ul class="bullet-list">${bullets}</ul>` : ""}
       </div>
+      ${isTop ? '<div class="swipe-hint" aria-hidden="true"></div>' : ""}
     `;
 
     if (isTop) bindDragAndSwipe(cardEl, item, onDecide);
@@ -76,10 +80,30 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
     south: document.querySelector(".edge-indicator.south"),
   };
 
+  const hintEl = () => cardEl.querySelector(".swipe-hint");
+  const actionFor = (dir) => (item.actions || []).find(a => a.direction === dir);
+
   const clearEdges = () => Object.values(edgeIndicators).forEach(el => el?.classList.remove("active"));
+  // A direction without an action shows nothing: no edge band, no label.
   const setEdge = (dir) => {
     clearEdges();
-    if (dir && edgeIndicators[dir]) edgeIndicators[dir].classList.add("active");
+    if (dir && actionFor(dir) && edgeIndicators[dir]) edgeIndicators[dir].classList.add("active");
+  };
+  const clearHint = () => {
+    const el = hintEl();
+    if (el) { el.className = "swipe-hint"; el.textContent = ""; }
+    delete cardEl.dataset.swipe;
+  };
+  // Label and colour of the action that releasing now would apply; it gets stronger near the threshold.
+  const showHint = (dir, distance) => {
+    const action = actionFor(dir);
+    const el = hintEl();
+    if (!action || !el) { clearHint(); return; }
+    const progress = Math.min(1, distance / SWIPE_THRESHOLD);
+    el.textContent = DIRECTION_ARROWS[dir] + " " + action.label; // textContent: never parsed as HTML
+    el.className = `swipe-hint on dir-${dir} tone-${action.color || "neutral"}${progress >= 1 ? " ready" : ""}`;
+    el.style.setProperty("--swipe-progress", progress.toFixed(2));
+    cardEl.dataset.swipe = dir;
   };
 
   const onStart = (clientX, clientY) => {
@@ -98,17 +122,22 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
     currentY = clientY - startY;
     const rotate = currentX * 0.05;
     cardEl.style.transform = `translate3d(${currentX}px, ${currentY}px, 0) rotate(${rotate}deg)`;
+    // The label counter-shifts so it stays on screen while the card leaves.
+    cardEl.style.setProperty("--swipe-dx", `${currentX}px`);
+    cardEl.style.setProperty("--swipe-dy", `${currentY}px`);
 
     const absX = Math.abs(currentX), absY = Math.abs(currentY);
-    if (absX < 30 && absY < 30) { setEdge(null); return; }
-    if (absX >= absY) setEdge(currentX > 0 ? "east" : "west");
-    else setEdge(currentY > 0 ? "south" : "north");
+    if (absX < SWIPE_FEEDBACK_MIN && absY < SWIPE_FEEDBACK_MIN) { setEdge(null); clearHint(); return; }
+    const dir = absX >= absY ? (currentX > 0 ? "east" : "west") : (currentY > 0 ? "south" : "north");
+    setEdge(dir);
+    showHint(dir, Math.max(absX, absY));
   };
 
   const onEnd = (cancelled = false) => {
     if (!isDown) return;
     isDown = false;
     clearEdges();
+    clearHint();
     const absX = Math.abs(currentX), absY = Math.abs(currentY);
     let dir = null;
     // A cancelled gesture (touchcancel / pointercancel) never decides, whatever the distance.
@@ -156,6 +185,7 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
           cardEl.style.transition = "none";
           cardEl.style.transform = cardEl.dataset.baseTransform;
           clearEdges();
+          clearHint();
           return;
         }
       }
