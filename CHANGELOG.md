@@ -3,6 +3,9 @@
 ## Non publié
 
 ### Nouveautés
+- Accueil : les decks sont rangés en trois groupes (« À trancher », « Tranché, en attente de l'agent », « Pris en compte »), chacun avec son état, « N/M décidés » et sa dernière activité ; un deck illisible reste visible (groupe « Illisibles », suppression possible).
+- Prise en compte par l'agent : `POST /api/decks/<id>/ack` et `deck_cli.py ack --id <id> --agent <nom> [--note ...]` ; la validité est calculée à la lecture (empreinte des décisions), un deck modifié depuis affiche « modifié depuis la prise en compte » ; `GET /api/decks` donne `ack_state`, `ack`, `last_activity`.
+- Icônes : un seul jeu d'icônes SVG en ligne (lucide, ISC) remplace tous les emoji et glyphes décoratifs.
 - Routes `POST /api/decks/<id>/reset`, `/delete` et `/items` (ajout de cartes, 200 par deck au plus), avec copie de sécurité préalable ; `POST /api/decks` accepte une `description` et des cartes sous forme d'objet (`title`, `description`, `bullets`).
 - La liste des decks donne `total`, `decided`, `is_completed` et `invalid` (deck illisible, identifié par son nom de fichier).
 - Synthèse : `active_seconds` (temps actif, pauses de plus de 2 minutes plafonnées), `completed_at`, `actions_breakdown_labeled` ; le Markdown du CLI affiche « Temps actif » et les libellés d'action au lieu des identifiants.

@@ -127,7 +127,7 @@ Exact actions depend on the deck (see [deck format](#deck-format-datadecksidjson
 
 ## AI suggestions and BYOK (bring your own key)
 
-Quick-Pick does not require any paid or proprietary model. Click the **⚙️** icon in the header to configure suggestions:
+Quick-Pick does not require any paid or proprietary model. Click the **settings** (gear) icon in the header to configure suggestions:
 
 1. **OpenAI / Ollama / Groq protocol**:
    - **Base URL**: `https://api.openai.com/v1`, `http://localhost:11434/v1`, or `https://api.groq.com/openai/v1`
@@ -233,12 +233,19 @@ python3 deck_cli.py wait sprint-42 --timeout 60
 python3 deck_cli.py history sprint-42              # versions, most recent first
 python3 deck_cli.py restore sprint-42 <version>    # also brings back a deleted deck
 
-# 9. Test an external classifier (never pass the key as an argument)
+# 9. Tell the human the decision was taken into account (last step, after really applying it).
+#    Stored in the deck as ack {agent, note, at, fingerprint}; the home page then moves the deck to
+#    "Pris en compte". Exit 1 if the deck is not finished or has no card. agent <= 40, note <= 280 characters.
+python3 deck_cli.py ack --id sprint-42 --agent claude --note "3 items merged, 2 dropped"
+
+# 10. Test an external classifier (never pass the key as an argument)
 echo "$MY_KEY" | python3 deck_cli.py classifier --endpoint https://api.openai.com/v1 --api-key-stdin
 QUICK_PICK_API_KEY="$MY_KEY" python3 deck_cli.py classifier --endpoint https://api.openai.com/v1
 ```
 
 The web UI offers the same management through `POST /api/decks/<id>/reset`, `POST /api/decks/<id>/delete` and `POST /api/decks/<id>/items` (`{"items": ["one line", {"title": "...", "description": "...", "bullets": ["..."]}]}`; 200 cards per deck at most). Each one takes a backup first, so a mistaken click is recoverable. **Who restores:** the human does not run commands: ask the agent, which runs `deck_cli.py history` then `restore`.
+
+The acknowledgement is also available as `POST /api/decks/<id>/ack` (`{"agent": "claude", "note": "..."}`; 409 if the deck is not finished or has no card). Its validity is computed at read time from a fingerprint of the decisions: if the human changes a decision afterwards (undo, new decision, added cards, reset), `ack_state` becomes `stale` and the home page shows the deck again under "Tranché, en attente de l'agent" with the message « modifié depuis la prise en compte ». `GET /api/decks` and `GET /api/decks/<id>` expose `ack_state` (`none`, `valid`, `stale`), `ack` and `last_activity`.
 
 The CLI no longer seeds the example decks (only the server does, on an empty decks folder). The summary reports "Temps actif" (`active_seconds`: gaps between decisions longer than 2 minutes count as a pause), `completed_at` and a labelled `actions_breakdown_labeled`.
 

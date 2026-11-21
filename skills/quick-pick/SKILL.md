@@ -1,7 +1,7 @@
 ---
 name: quick-pick
 description: "Use when you need a human to arbitrate 4+ independent items (backlog, rules, skills, PRs, options) as a swipe-card deck instead of a long chat questionnaire; not for a single blocking question."
-version: 2.1.0
+version: 2.2.0
 license: MIT
 platforms: [linux, macos, windows]
 category: orchestration
@@ -11,7 +11,7 @@ metadata:
 
 # Quick-Pick : arbitrages par cartes
 
-L'agent prépare un deck, l'humain le tranche en swipant (téléphone) ou au clavier (PC), l'agent lit les décisions et reprend. Chaîne complète : **créer → prévenir → attendre → lire → agir**.
+L'agent prépare un deck, l'humain le tranche en swipant (téléphone) ou au clavier (PC), l'agent lit les décisions et reprend. Chaîne complète : **créer → prévenir → attendre → lire → agir → signaler la prise en compte**.
 
 ## Quand l'utiliser
 - 4 éléments indépendants ou plus à faire trancher : tri de backlog ou de tickets, règles à garder / modifier / supprimer, skills ou dépendances à purger, options d'architecture, PRs.
@@ -63,4 +63,11 @@ Une version est l'état **avant** l'opération indiquée par son suffixe (`-rese
 Le serveur sème des decks d'exemple au démarrage si le dossier est vide ; le CLI, non.
 
 ## 5. Suggestions IA (optionnel)
-Le classifieur ajoute des badges de pré-qualification, réglé dans l'interface (bouton `⚙️`) : endpoint, modèle, clé de l'humain. **Ne jamais passer une clé en argument** : `QUICK_PICK_API_KEY` ou `--api-key-stdin` pour un test (`deck_cli.py classifier --endpoint <URL>`). Un endpoint local ou privé exige `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. Détail de ce que stocke le navigateur et de ce que voit le serveur : README, section « Where your API key lives ».
+Le classifieur ajoute des badges de pré-qualification, réglé dans l'interface (bouton « réglages », engrenage) : endpoint, modèle, clé de l'humain. **Ne jamais passer une clé en argument** : `QUICK_PICK_API_KEY` ou `--api-key-stdin` pour un test (`deck_cli.py classifier --endpoint <URL>`). Un endpoint local ou privé exige `QUICK_PICK_ALLOW_PRIVATE_ENDPOINTS=1`. Détail de ce que stocke le navigateur et de ce que voit le serveur : README, section « Where your API key lives ».
+
+## 6. Signaler la prise en compte (étape finale obligatoire)
+Une fois la décision **réellement appliquée** (pas avant), l'agent le dit à l'humain dans le deck :
+```bash
+python3 deck_cli.py ack --id mon-arbitrage --agent <ton-nom> --note "ce qui a été fait, en une phrase"
+```
+`--note` est facultative (280 caractères au plus, `--agent` 40). L'accueil range alors le deck dans « Pris en compte » avec ton nom, la date et la note ; sans cette étape il reste dans « Tranché, en attente de l'agent » et l'humain croit que rien n'a été fait. Code 1 si le deck n'est pas terminé ou n'a aucune carte. Si l'humain change une décision après coup (annulation, nouvelle décision, cartes ajoutées, remise à zéro), la prise en compte devient périmée (« modifié depuis la prise en compte ») : relire la synthèse, ré-appliquer, puis relancer `ack`. Même route en HTTP : `POST /api/decks/<id>/ack` (`{"agent": "...", "note": "..."}`).

@@ -125,7 +125,7 @@ Les actions exactes dépendent du deck (voir [format d'un deck](#format-dun-deck
 
 ## Assistance IA et BYOK (votre propre clé)
 
-Quick-Pick n'impose aucun modèle payant ou propriétaire. Cliquez sur l'icône **⚙️** dans l'en-tête pour configurer les suggestions :
+Quick-Pick n'impose aucun modèle payant ou propriétaire. Cliquez sur l'icône **réglages** (engrenage) dans l'en-tête pour configurer les suggestions :
 
 1. **Protocole OpenAI / Ollama / Groq** :
    - **URL de base** : `https://api.openai.com/v1`, `http://localhost:11434/v1` ou `https://api.groq.com/openai/v1`
@@ -231,12 +231,19 @@ python3 deck_cli.py wait sprint-42 --timeout 60
 python3 deck_cli.py history sprint-42              # versions, la plus récente d'abord
 python3 deck_cli.py restore sprint-42 <version>    # ramène aussi un deck supprimé
 
-# 9. Tester un classifieur externe (ne jamais passer la clé en argument)
+# 9. Signaler à l'humain que la décision est prise en compte (dernière étape, après l'avoir vraiment appliquée).
+#    Stocké dans le deck : ack {agent, note, at, fingerprint} ; l'accueil range alors le deck dans
+#    « Pris en compte ». Code 1 si le deck n'est pas terminé ou sans carte. agent <= 40, note <= 280 caractères.
+python3 deck_cli.py ack --id sprint-42 --agent claude --note "3 éléments fusionnés, 2 abandonnés"
+
+# 10. Tester un classifieur externe (ne jamais passer la clé en argument)
 echo "$MY_KEY" | python3 deck_cli.py classifier --endpoint https://api.openai.com/v1 --api-key-stdin
 QUICK_PICK_API_KEY="$MY_KEY" python3 deck_cli.py classifier --endpoint https://api.openai.com/v1
 ```
 
 L'interface web propose la même gestion via `POST /api/decks/<id>/reset`, `POST /api/decks/<id>/delete` et `POST /api/decks/<id>/items` (`{"items": ["une ligne", {"title": "...", "description": "...", "bullets": ["..."]}]}` ; 200 cartes par deck au plus). Chacune fait d'abord une copie de sécurité : un clic malheureux se rattrape. **Qui restaure :** l'humain ne tape aucune commande, il demande à l'agent, qui lance `deck_cli.py history` puis `restore`.
+
+La prise en compte existe aussi en `POST /api/decks/<id>/ack` (`{"agent": "claude", "note": "..."}` ; 409 si le deck n'est pas terminé ou sans carte). Sa validité est calculée à la lecture à partir d'une empreinte des décisions : si l'humain change une décision ensuite (annulation, nouvelle décision, cartes ajoutées, remise à zéro), `ack_state` passe à `stale` et l'accueil remet le deck sous « Tranché, en attente de l'agent » avec le message « modifié depuis la prise en compte ». `GET /api/decks` et `GET /api/decks/<id>` exposent `ack_state` (`none`, `valid`, `stale`), `ack` et `last_activity`.
 
 Le CLI ne sème plus les decks d'exemple (seul le serveur le fait, sur un dossier de decks vide). La synthèse donne le « Temps actif » (`active_seconds` : un écart de plus de 2 minutes entre deux décisions compte comme une pause), `completed_at` et une ventilation avec libellés (`actions_breakdown_labeled`).
 
