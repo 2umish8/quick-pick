@@ -526,3 +526,10 @@ textarea.deck-create-input { cursor: text; }
   .deck-act { padding: 6px 8px; font-size: 12px; }
   .deck-act[data-act="delete"]:not(.armed) { padding: 6px 10px; }
 }
+
+/* Phone, inside a deck: the back link names the deck, so the brand word gives way
+   instead of colliding with the header buttons once "Annuler" appears. */
+@media (max-width: 640px) {
+  .logo-zone:has(.deck-pill:not([hidden])) .logo-title { display: none; }
+  .deck-pill { font-size: 13px; }
+}
