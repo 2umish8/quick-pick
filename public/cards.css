@@ -156,7 +156,8 @@ main.stage-shell:has(#view-game:not([hidden])) {
 }
 .action-key-button.dir-north, .action-key-button.dir-south { flex-basis: 100%; }
 .action-key-button:hover { background: rgba(255, 255, 255, 0.08); border-color: var(--border-focus); }
-.dock-arrow { font-size: 18px; line-height: 1; font-weight: 700; }
+.dock-arrow { display: inline-flex; line-height: 1; }
+.dock-arrow .icon { width: 20px; height: 20px; vertical-align: 0; }
 /* One colour per action, the same as the swipe label; soft tints, never pure white on pure black. */
 .action-key-button.tone-success { background: rgba(34, 197, 94, 0.14); border-color: rgba(34, 197, 94, 0.5); color: #86EFAC; }
 .action-key-button.tone-danger { background: rgba(239, 68, 68, 0.14); border-color: rgba(239, 68, 68, 0.5); color: #FCA5A5; }
@@ -177,6 +178,7 @@ main.stage-shell:has(#view-game:not([hidden])) {
   top: 14px; max-width: 78%; width: max-content;
   padding: 8px 14px; border-radius: var(--radius-btn);
   font-size: 17px; font-weight: 800; line-height: 1.25;
+  display: flex; align-items: center; gap: 0.4em;
   background: var(--neutral-state); color: var(--on-accent);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
   opacity: 0;
@@ -186,6 +188,7 @@ main.stage-shell:has(#view-game:not([hidden])) {
 }
 /* While a direction is targeted, the text steps back so the label is never read through it. */
 .square-card[data-swipe] .card-inner { opacity: 0.3; transition: opacity 0.12s ease; }
+.swipe-hint .icon { width: 1.1em; height: 1.1em; vertical-align: 0; }
 .swipe-hint.ready { outline: 3px solid rgba(243, 244, 246, 0.55); }
 .swipe-hint.tone-success { background: var(--success); }
 .swipe-hint.tone-danger { background: var(--danger); }
@@ -265,7 +268,7 @@ main.stage-shell:has(#view-game:not([hidden])) {
     max-width: none; gap: 10px;
   }
   .action-key-button { flex-basis: calc(50% - 5px); min-height: 60px; font-size: 16px; white-space: nowrap; padding: 0 8px; gap: 6px; }
-  .dock-arrow { font-size: 22px; }
+  .dock-arrow .icon { width: 24px; height: 24px; }
   .keycap-badge { font-size: 12px; padding: 3px 8px; }
   .card-inner { padding: clamp(24px, 2.4vw, 48px) clamp(24px, 2.6vw, 56px); }
   .card-badges { gap: 8px; margin-bottom: clamp(12px, 1.2vw, 20px); }

@@ -1,5 +1,6 @@
 // Module Drawer : consultation des cartes décidées et à décider
 import { escapeHtml } from "./escape.js";
+import { icon } from "./icons.js";
 
 let currentTab = "pending"; // "pending" | "decided"
 let activeState = null;
@@ -89,7 +90,7 @@ function renderDrawerContent() {
     const decisionBadge = item.action_label ? `<span class="decision-pill">${escapeHtml(item.action_label)}</span>` : "";
     const isCurrent = currentTab === "pending" && idx === 0 ? `<span class="current-pill">En cours</span>` : "";
     const commentBlock = item.comment ? `<div class="drawer-row-comment">“${escapeHtml(item.comment)}”</div>` : "";
-    const undoAction = currentTab === "decided" ? `<button class="drawer-row-undo-btn" data-item-id="${escapeHtml(item.id)}" title="Remettre cette carte en jeu">↩ Réviser</button>` : "";
+    const undoAction = currentTab === "decided" ? `<button class="drawer-row-undo-btn" data-item-id="${escapeHtml(item.id)}" title="Remettre cette carte en jeu">${icon("undo-2")}Réviser</button>` : "";
     return `
       <div class="drawer-row ${isCurrent ? 'is-active' : ''}">
         <div class="drawer-row-main">

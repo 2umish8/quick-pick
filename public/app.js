@@ -6,11 +6,14 @@ import { initDrawer, openDrawer, updateDrawerState } from "./deck-drawer.js";
 import { initSettingsModal, fetchItemPrediction } from "./classifier.js";
 import { initDeckForm } from "./deck-form.js";
 import { formatDecisionSummary, parseCardLines } from "./format.js";
+import { groupDecks, deckStateKey, relativeDate } from "./deck-groups.js";
+import { icon } from "./icons.js";
 
 const state = { activeDeckId: null, deckData: null, isProcessing: false, currentView: "decks" };
 
 const dom = {
   headerPill: document.getElementById("header-deck-pill"),
+  headerPillText: document.getElementById("header-deck-pill-text"),
   headerUndoBtn: document.getElementById("header-undo-btn"),
   progressPill: document.getElementById("header-progress-pill"),
   viewDecks: document.getElementById("view-decks"),
@@ -65,7 +68,7 @@ let refreshSeq = 0;
 function disarm() {
   if (!armed) return;
   clearTimeout(armed.timer);
-  armed.button.textContent = armed.label;
+  armed.button.innerHTML = armed.html;
   armed.button.classList.remove("armed");
   armed.note.hidden = true;
   armed = null;
@@ -73,33 +76,52 @@ function disarm() {
 
 function arm(button, note, noteText) {
   disarm();
-  armed = { button, note, label: button.textContent, timer: setTimeout(disarm, CONFIRM_DELAY_MS) };
+  armed = { button, note, html: button.innerHTML, timer: setTimeout(disarm, CONFIRM_DELAY_MS) };
   button.textContent = "Confirmer ?";
   button.classList.add("armed");
   note.textContent = noteText || "";
   note.hidden = !noteText;
 }
 
+// Short state words, shown on each deck; waiting / acked are also the group titles (icon = the state).
+const STATE_TEXT = {
+  "not-started": "Non commencé", "in-progress": "En cours", empty: "Aucune carte",
+  waiting: "Tranché", acked: "Pris en compte", invalid: "Illisible",
+};
+const STATE_ICON = { waiting: "check", acked: "check-check", invalid: "triangle-alert" };
+
 function deckItemHtml(deck) {
   const category = escapeHtml(deck.category || "PROJET");
   const title = escapeHtml(deck.title);
   const desc = escapeHtml(deck.description || "");
-  let status;
-  if (deck.invalid) status = `<span class="deck-item-invalid"><span class="deck-ico" aria-hidden="true">⚠</span>Illisible</span>`;
-  else if (deck.is_completed) status = `<span class="deck-item-done"><span class="deck-ico" aria-hidden="true">✓</span>Terminé</span>`;
-  else {
-    // Colour = meaning: nothing decided yet -> neutral grey, in progress -> amber.
-    const stateClass = Number(deck.decided) > 0 ? "state-active" : "state-zero";
-    status = `<span class="deck-item-progress ${stateClass}"><span class="deck-item-count">${escapeHtml(String(deck.decided))}/${escapeHtml(String(deck.total))}</span> <span class="deck-item-unit">décidés</span></span>`;
+  const stateKey = deckStateKey(deck);
+  const stateIcon = STATE_ICON[stateKey] ? icon(STATE_ICON[stateKey], "deck-ico") : "";
+  const status = `<span class="deck-item-state state-${stateKey}">${stateIcon}${STATE_TEXT[stateKey]}</span>`;
+  let meta = "";
+  let extra = "";
+  if (deck.invalid) {
+    extra = `<p class="deck-item-issue">Fichier illisible${deck.error ? ` : ${escapeHtml(deck.error)}` : ""}</p>`;
+  } else {
+    // Colour = meaning: nothing decided yet -> neutral grey, in progress -> amber, finished -> green.
+    const stateClass = deck.is_completed ? "state-done" : Number(deck.decided) > 0 ? "state-active" : "state-zero";
+    const progress = stateKey === "empty" ? "" : `<span class="deck-item-progress ${stateClass}"><span class="deck-item-count">${escapeHtml(String(deck.decided))}/${escapeHtml(String(deck.total))}</span> <span class="deck-item-unit">décidés</span></span>`;
+    const when = deck.last_activity ? `<span class="deck-item-when">${escapeHtml(relativeDate(deck.last_activity))}</span>` : "";
+    meta = `<div class="deck-item-meta">${progress}${when}</div>`;
+    if (deck.ack && deck.ack_state === "valid") {
+      const note = deck.ack.note ? `<p class="deck-item-ack-note">${escapeHtml(deck.ack.note)}</p>` : "";
+      extra = `<div class="deck-item-ack">${icon("bot")}<span class="deck-item-ack-agent">${escapeHtml(deck.ack.agent || "agent")}</span><span class="deck-item-when">${escapeHtml(relativeDate(deck.ack.at))}</span></div>${note}`;
+    } else if (deck.ack_state === "stale") {
+      extra = `<p class="deck-item-stale">${icon("triangle-alert")}<span>modifié depuis la prise en compte</span></p>`;
+    }
   }
   const cardOpen = deck.invalid
     ? `<button type="button" class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}" disabled>`
     : `<button type="button" class="deck-item-card" data-deck-id="${escapeHtml(deck.id)}">`;
   const actions = deck.invalid
     ? `<button type="button" class="deck-act danger" data-act="delete" title="Supprimer">Supprimer</button>`
-    : `<button type="button" class="deck-act" data-act="reset">Remettre à zéro</button>
-       <button type="button" class="deck-act danger" data-act="delete" title="Supprimer">Supprimer</button>
-       <button type="button" class="deck-act" data-act="add" aria-expanded="false">Ajouter des cartes</button>`;
+    : `<button type="button" class="deck-act" data-act="reset">${icon("rotate-ccw")}Remettre à zéro</button>
+       <button type="button" class="deck-act danger" data-act="delete" title="Supprimer">${icon("trash-2")}Supprimer</button>
+       <button type="button" class="deck-act" data-act="add" aria-expanded="false">${icon("plus")}Ajouter des cartes</button>`;
   const addZone = deck.invalid ? "" : `
       <div class="deck-item-add" hidden>
         <textarea class="deck-create-input deck-create-textarea deck-add-input" rows="4" aria-label="Cartes à ajouter" placeholder="Une carte par ligne. Détail : titre :: détail"></textarea>
@@ -110,15 +132,30 @@ function deckItemHtml(deck) {
         </div>
       </div>`;
   return `
-    <div class="deck-item" data-deck-id="${escapeHtml(deck.id)}">
+    <div class="deck-item" data-deck-id="${escapeHtml(deck.id)}" data-state="${stateKey}">
       ${cardOpen}
         <div class="deck-item-top"><span class="deck-item-category">${category}</span>${status}</div>
         <div class="deck-item-title">${title}</div>
         <div class="deck-item-desc">${desc}</div>
+        ${meta}${extra}
       </button>
       <div class="deck-item-actions">${actions}</div>
       <p class="deck-item-note" hidden></p>${addZone}
     </div>`;
+}
+
+// Groups the user folded on the home page (kept across list refreshes); "Pris en compte" starts folded.
+const foldedGroups = new Set(["acked"]);
+
+function groupHtml(group) {
+  const folded = foldedGroups.has(group.key);
+  return `
+    <section class="deck-group" data-group="${group.key}">
+      <button type="button" class="deck-group-head" data-group-toggle="${group.key}" aria-expanded="${!folded}" aria-controls="deck-group-${group.key}">
+        ${icon("chevron-down", "group-chevron")}<span class="deck-group-title">${escapeHtml(group.title)}</span><span class="deck-group-count">${group.decks.length}</span>
+      </button>
+      <div class="deck-list" id="deck-group-${group.key}"${folded ? " hidden" : ""}>${group.decks.map(deckItemHtml).join("")}</div>
+    </section>`;
 }
 
 async function runDeckAction(task, failureLabel) {
@@ -187,10 +224,19 @@ function onDeckAction(event) {
 }
 
 dom.deckList.addEventListener("click", onDeckAction);
+dom.deckList.addEventListener("click", event => {
+  const head = event.target.closest("button[data-group-toggle]");
+  if (!head) return;
+  const key = head.dataset.groupToggle;
+  const folded = !foldedGroups.has(key);
+  if (folded) foldedGroups.add(key); else foldedGroups.delete(key);
+  head.setAttribute("aria-expanded", String(!folded));
+  document.getElementById(`deck-group-${key}`).hidden = folded;
+});
 
 function renderDeckList(decks) {
   dom.deckList.innerHTML = decks.length
-    ? decks.map(deckItemHtml).join("")
+    ? groupDecks(decks).map(groupHtml).join("")
     : `<p class="deck-list-empty">Aucun deck pour l'instant. Créez le premier ci-dessous, ou posez une liste et commencez à trier.</p>`;
   dom.deckList.querySelectorAll(".deck-item-card:not([disabled])").forEach(el => {
     el.addEventListener("click", () => openDeck(el.dataset.deckId));
@@ -224,7 +270,7 @@ async function startDeck(deckId) {
   state.activeDeckId = deckId;
   window.location.hash = encodeURIComponent(deckId);
   const deckData = await fetchDeckState(deckId);
-  dom.headerPill.textContent = deckData.title || deckId;
+  dom.headerPillText.textContent = deckData.title || deckId;
   handleDeckState(deckData);
 }
 
@@ -321,7 +367,7 @@ async function triggerUndo(itemId = null) {
 
 const DIRECTION_SHORTCUTS = { east: "ArrowRight", west: "ArrowLeft", north: "ArrowUp", south: "ArrowDown" };
 
-const DOCK_ARROWS = { east: "→", west: "←", north: "↑", south: "↓" };
+const DOCK_ARROWS = { east: "arrow-right", west: "arrow-left", north: "arrow-up", south: "arrow-down" };
 const DOCK_RANK = { north: 0, west: 1, east: 2, south: 3 };
 const dockRank = (action) => DOCK_RANK[action.direction] ?? 4;
 
@@ -333,7 +379,7 @@ function renderDock(actions) {
   const ordered = [...actions].sort((a, b) => dockRank(a) - dockRank(b));
   dom.kineticDock.innerHTML = ordered.map(act => `
     <button class="action-key-button tone-${escapeHtml(act.color || 'neutral')} dir-${escapeHtml(act.direction || 'none')}" data-action-id="${escapeHtml(act.id)}" data-direction="${escapeHtml(act.direction || '')}"${ariaKeyShortcuts(act)}>
-      ${DOCK_ARROWS[act.direction] ? `<span class="dock-arrow" aria-hidden="true">${DOCK_ARROWS[act.direction]}</span>` : ""}
+      ${DOCK_ARROWS[act.direction] ? `<span class="dock-arrow" aria-hidden="true">${icon(DOCK_ARROWS[act.direction])}</span>` : ""}
       <span>${escapeHtml(act.label)}</span>
       ${act.key ? `<kbd class="keycap-badge">${escapeHtml(String(act.key).toUpperCase())}</kbd>` : ""}
     </button>
@@ -390,14 +436,14 @@ async function showSummary() {
 
   dom.summaryContent.innerHTML = `
     <div class="victory-hero">
-      <div class="trophy-badge">✨</div>
+      <div class="trophy-badge">${icon("sparkles")}</div>
       <h2>Toutes les cartes sont décidées</h2>
       <p>${escapeHtml(formatDecisionSummary(summary.total_decided, summary.active_seconds))}</p>
     </div>
     ${breakdownHtml ? `<div class="summary-stats-grid">${breakdownHtml}</div>` : ""}
     ${entriesHtml ? `<div class="summary-list">${entriesHtml}</div>` : ""}
     <div class="recap-actions-row">
-      ${state.deckData?.can_undo ? `<button class="recap-btn secondary" id="btn-back-to-card">Revenir à la dernière carte</button>` : ""}
+      ${state.deckData?.can_undo ? `<button class="recap-btn secondary" id="btn-back-to-card">${icon("undo-2")}Revenir à la dernière carte</button>` : ""}
       <button class="recap-btn secondary" id="btn-copy-markdown">Copier en Markdown</button>
       <button class="recap-btn primary" id="btn-back-decks">Retour aux sujets</button>
     </div>

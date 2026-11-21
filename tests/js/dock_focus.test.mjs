@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { escapeHtml } from "../../public/escape.js";
+import { icon } from "../../public/icons.js";
 
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "public");
 const app = readFileSync(join(PUBLIC_DIR, "app.js"), "utf8");
@@ -42,9 +43,9 @@ function setup() {
   const doc = { activeElement: { closest: () => null } };
   const kineticDock = makeDock(doc);
   const dom = { kineticDock };
-  const factory = new Function("document", "dom", "escapeHtml", "onCardDecide",
+  const factory = new Function("document", "dom", "escapeHtml", "icon", "onCardDecide",
     `${dockSource}\nreturn renderDock;`);
-  const renderDock = factory(doc, dom, escapeHtml, () => {});
+  const renderDock = factory(doc, dom, escapeHtml, icon, () => {});
   return { doc, kineticDock, renderDock };
 }
 

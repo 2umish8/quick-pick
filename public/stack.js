@@ -1,10 +1,11 @@
 // Module Stack : Rendu de la pile réelle carrée & physique de drag/swipe
 import { escapeHtml } from "./escape.js";
+import { icon } from "./icons.js";
 
 const SWIPE_THRESHOLD = 85;
 // Below this distance the gesture is still a hesitation: no feedback yet.
 const SWIPE_FEEDBACK_MIN = 30;
-const DIRECTION_ARROWS = { east: "→", west: "←", north: "↑", south: "↓" };
+const DIRECTION_ARROWS = { east: "arrow-right", west: "arrow-left", north: "arrow-up", south: "arrow-down" };
 
 function getCardOrganicTransform(index, id) {
   let hash = 0;
@@ -95,7 +96,7 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
   };
   const clearHint = () => {
     const el = hintEl();
-    if (el) { el.className = "swipe-hint"; el.textContent = ""; }
+    if (el) { el.className = "swipe-hint"; el.textContent = ""; delete el.dataset.hintKey; }
     delete cardEl.dataset.swipe;
   };
   // Label and colour of the action that releasing now would apply; it gets stronger near the threshold.
@@ -104,7 +105,15 @@ function bindDragAndSwipe(cardEl, item, onDecide) {
     const el = hintEl();
     if (!action || !el) { clearHint(); return; }
     const progress = Math.min(1, distance / SWIPE_THRESHOLD);
-    el.textContent = DIRECTION_ARROWS[dir] + " " + action.label; // textContent: never parsed as HTML
+    // The label goes through textContent (never parsed as HTML); only the static icon markup is HTML.
+    const hintKey = dir + "|" + action.label;
+    if (el.dataset.hintKey !== hintKey) {
+      const label = document.createElement("span");
+      label.textContent = action.label;
+      el.innerHTML = icon(DIRECTION_ARROWS[dir]);
+      el.append(label);
+      el.dataset.hintKey = hintKey;
+    }
     el.className = `swipe-hint on dir-${dir} tone-${action.color || "neutral"}${progress >= 1 ? " ready" : ""}`;
     el.style.setProperty("--swipe-progress", progress.toFixed(2));
     cardEl.dataset.swipe = dir;

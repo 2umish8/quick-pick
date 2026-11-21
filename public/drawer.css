@@ -82,6 +82,7 @@
   font-size: 18px;
   cursor: pointer;
   padding: 4px 8px;
+  display: inline-flex;
 }
 
 .drawer-body {
@@ -154,7 +155,11 @@
   white-space: nowrap;
   transition: all 0.12s ease;
   margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
+.drawer-row-undo-btn .icon { width: 12px; height: 12px; vertical-align: 0; }
 .drawer-row-undo-btn:hover {
   background: rgba(239, 68, 68, 0.15);
   border-color: rgba(239, 68, 68, 0.4);

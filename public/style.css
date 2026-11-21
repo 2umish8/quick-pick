@@ -55,6 +55,9 @@ button, select, summary, label[for] { cursor: pointer; }
 button:disabled { cursor: default; }
 input, textarea { cursor: text; caret-color: var(--info); }
 
+/* One icon set (Lucide, ISC, see icons.js): same size and stroke weight everywhere, colour follows the text. */
+.icon { width: 1.15em; height: 1.15em; flex: 0 0 auto; vertical-align: -0.2em; }
+
 /* Header */
 header.app-header {
   padding: 14px 20px;
@@ -99,13 +102,20 @@ header.app-header {
   text-overflow: ellipsis;
   cursor: pointer;
 }
-.deck-pill::before { content: "← " / ""; }
+.deck-pill { display: inline-flex; align-items: center; gap: 6px; }
+.deck-pill .icon { width: 14px; height: 14px; vertical-align: 0; }
+#header-deck-pill-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.logo-title { display: inline-flex; align-items: center; gap: 7px; }
+.logo-title .logo-ico { width: 18px; height: 18px; color: var(--warning); vertical-align: 0; }
 .header-actions-zone {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
 }
+.header-settings-btn .icon { width: 17px; height: 17px; vertical-align: 0; }
+.header-undo-btn { gap: 5px; }
+.header-undo-btn .icon { width: 14px; height: 14px; vertical-align: 0; }
 .header-settings-btn {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border);
@@ -177,12 +187,32 @@ main.stage-shell {
 .deck-selector-head { text-align: center; margin-bottom: 24px; }
 .deck-selector-head h2 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
 .deck-selector-head p { color: var(--muted); font-size: 14px; }
+.deck-groups { display: flex; flex-direction: column; gap: 26px; width: 100%; }
+.deck-group { display: grid; gap: 12px; }
+.deck-group-head {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: 0; padding: 4px 2px; cursor: pointer;
+  font: inherit; color: var(--text); text-align: left; white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.deck-group-title { font-size: 15px; font-weight: 700; }
+.deck-group-count { font-size: 15px; font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; }
+.deck-group-head .group-chevron { width: 16px; height: 16px; vertical-align: 0; color: var(--muted); transition: transform 0.15s ease; }
+.deck-group-head[aria-expanded="false"] .group-chevron { transform: rotate(-90deg); }
+.deck-group-head:hover .group-chevron { color: var(--text); }
+/* "À trancher" is the action: its title is the colour of an open decision; the done groups step back. */
+.deck-group[data-group="todo"] .deck-group-title { color: var(--warning); }
+.deck-group[data-group="waiting"] .deck-group-title { color: var(--info); }
+.deck-group[data-group="invalid"] .deck-group-title { color: #F87171; }
+.deck-group[data-group="acked"] .deck-group-title { color: var(--muted); font-weight: 600; }
+.deck-group[data-group="acked"] .deck-item { opacity: 0.78; }
+.deck-group[data-group="acked"] .deck-item:hover, .deck-group[data-group="acked"] .deck-item:focus-within { opacity: 1; }
 .deck-list { display: grid; gap: 14px; width: 100%; }
 .deck-item-card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  padding: 20px;
+  padding: 18px 20px;
   cursor: pointer;
   /* MOW-188: real <button> now, without the native chrome. */
   display: block; width: 100%; text-align: left;
@@ -192,23 +222,39 @@ main.stage-shell {
 .deck-item-card:hover { transform: translateY(-2px); border-color: var(--border-focus); }
 .deck-item-card:disabled { cursor: default; opacity: 0.7; }
 .deck-item-card:disabled:hover { transform: none; border-color: var(--border); }
-.deck-item { display: grid; gap: 8px; }
+.deck-item { display: grid; gap: 6px; min-width: 0; }
 .deck-item-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; white-space: nowrap; }
-.deck-item-top .deck-item-category { margin-bottom: 0; }
+.deck-item-top .deck-item-category { margin-bottom: 0; min-width: 0; }
+/* State = a short coloured word (+ icon when it is not already the group title). */
+.deck-item-state { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700; white-space: nowrap; flex: 0 0 auto; }
+.deck-item-state.state-not-started, .deck-item-state.state-empty { color: var(--neutral-state); }
+.deck-item-state.state-in-progress { color: var(--warning); }
+.deck-item-state.state-waiting { color: var(--info); }
+.deck-item-state.state-acked { color: var(--success); }
+.deck-item-state.state-invalid { color: #F87171; }
+.deck-item-state .icon { width: 14px; height: 14px; vertical-align: 0; }
+.deck-item-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 10px; white-space: nowrap; }
 /* The figure is the message, the word beside it is secondary; colour = state (grey / amber / green). */
 .deck-item-progress { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .deck-item-count { font-size: 20px; font-weight: 800; line-height: 1; }
 .deck-item-unit { font-size: 11px; font-weight: 500; color: var(--muted); }
 .deck-item-progress.state-zero .deck-item-count { color: var(--neutral-state); }
 .deck-item-progress.state-active .deck-item-count { color: var(--warning); }
-.deck-item-done, .deck-item-invalid { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; white-space: nowrap; }
-.deck-item-done { color: var(--success); }
-.deck-item-invalid { color: #F87171; }
-.deck-ico { font-size: 14px; line-height: 1; }
-.deck-item-actions { display: flex; flex-wrap: nowrap; gap: 6px; }
+.deck-item-progress.state-done .deck-item-count { color: var(--success); }
+.deck-item-when { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.deck-item-ack { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 8px; font-size: 12.5px; color: var(--success); }
+.deck-item-ack .icon { width: 15px; height: 15px; vertical-align: 0; }
+.deck-item-ack-agent { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.deck-item-ack-note { margin-top: 4px; font-size: 12.5px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
+.deck-item-stale { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12.5px; font-weight: 600; color: var(--warning); }
+.deck-item-stale .icon { width: 15px; height: 15px; vertical-align: 0; }
+.deck-item-issue { margin-top: 8px; font-size: 12.5px; line-height: 1.4; color: #F87171; overflow-wrap: anywhere; }
+.deck-ico { width: 14px; height: 14px; }
+/* Secondary actions: ghost buttons, quieter than the card that opens the deck, always reachable. */
+.deck-item-actions { display: flex; flex-wrap: nowrap; gap: 4px; }
 .deck-act {
-  min-height: 36px;
-  padding: 6px 10px;
+  min-height: 34px;
+  padding: 5px 9px;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
@@ -216,30 +262,29 @@ main.stage-shell {
   gap: 5px;
   flex: 0 0 auto;
   border-radius: var(--radius-btn);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   cursor: pointer;
 }
-.deck-act:hover { background: rgba(255, 255, 255, 0.12); border-color: var(--border-focus); }
+.deck-act .icon { width: 14px; height: 14px; vertical-align: 0; }
+.deck-act:hover { background: rgba(255, 255, 255, 0.08); border-color: var(--border); color: var(--text); }
 .deck-act.danger { color: #F87171; }
-/* Pictograms by CSS (empty alt text = ignored by screen readers); the two-step confirm swaps the text only. */
-.deck-act[data-act="reset"]::before { content: "↺" / ""; }
-.deck-act[data-act="delete"]::before { content: "🗑\FE0E" / ""; }
-.deck-act[data-act="add"]::before { content: "＋" / ""; }
 /* Delete is icon-only at rest (its text stays in the DOM for screen readers); armed it shows "Confirmer ?". */
-.deck-act[data-act="delete"]:not(.armed) { font-size: 0; padding: 6px 11px; gap: 0; }
-.deck-act[data-act="delete"]:not(.armed)::before { font-size: 15px; }
-.deck-act.armed::before { content: none; }
-.deck-act.armed { background: rgba(239, 68, 68, 0.16); border-color: rgba(239, 68, 68, 0.5); color: #FCA5A5; }
+.deck-act[data-act="delete"]:not(.armed) { font-size: 0; padding: 5px 10px; gap: 0; }
+.deck-act[data-act="delete"]:not(.armed) .icon { width: 15px; height: 15px; }
+.deck-item[data-state="invalid"] .deck-act[data-act="delete"]:not(.armed) { font-size: 12.5px; padding: 5px 9px; border-color: var(--border); }
+.deck-act.armed { background: rgba(239, 68, 68, 0.16); border-color: rgba(239, 68, 68, 0.5); color: #FCA5A5; font-size: 12.5px; }
 .deck-item-note { font-size: 12.5px; color: var(--muted); }
 .deck-item-add { display: grid; gap: 8px; }
 .deck-add-buttons { display: flex; gap: 8px; }
+.deck-add-buttons .deck-act { border-color: var(--border); background: rgba(255, 255, 255, 0.06); color: var(--text); }
 .deck-item-category { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--info); margin-bottom: 6px; }
-.deck-item-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-.deck-item-desc { font-size: 13px; color: var(--muted); line-height: 1.4; }
+.deck-item-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; overflow-wrap: anywhere; }
+.deck-item-desc { font-size: 13px; color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
+.deck-item-desc:empty { display: none; }
 .deck-list-empty {
   font-size: 13.5px;
   color: var(--muted);
@@ -265,7 +310,8 @@ main.stage-shell {
   cursor: pointer;
   white-space: nowrap;
 }
-.deck-create-toggle::before { content: "＋ " / ""; }
+.deck-create-toggle { display: flex; align-items: center; justify-content: center; gap: 7px; }
+.deck-create-toggle .icon { width: 16px; height: 16px; vertical-align: 0; }
 .deck-create-toggle:hover { filter: brightness(1.08); }
 .deck-create-form {
   margin-top: 14px;
@@ -347,7 +393,8 @@ textarea.deck-create-input { cursor: text; }
 /* Summary */
 #view-summary { width: 100%; text-align: center; }
 .victory-hero { padding: 24px 0 16px; }
-.trophy-badge { font-size: 36px; margin-bottom: 8px; }
+.trophy-badge { font-size: 36px; margin-bottom: 8px; color: var(--warning); }
+.trophy-badge .icon { width: 44px; height: 44px; vertical-align: 0; }
 .summary-stats-grid {
   display: flex;
   flex-wrap: wrap;
@@ -400,7 +447,8 @@ textarea.deck-create-input { cursor: text; }
 }
 .recap-btn.primary { background: linear-gradient(180deg, var(--success), var(--success-deep)); color: var(--on-accent); }
 .recap-btn.primary:hover { filter: brightness(1.08); }
-#btn-back-to-card::before { content: "↶ " / ""; }
+.recap-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.recap-btn .icon { width: 16px; height: 16px; vertical-align: 0; }
 .recap-btn.secondary { background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); color: var(--text); }
 .recap-btn.secondary:hover { background: rgba(255, 255, 255, 0.12); border-color: var(--border-focus); }
 
@@ -442,7 +490,9 @@ textarea.deck-create-input { cursor: text; }
   font-size: 18px;
   cursor: pointer;
   padding: 4px;
+  display: inline-flex;
 }
+.settings-close-btn .icon, .drawer-close-btn .icon { width: 18px; height: 18px; vertical-align: 0; }
 .settings-modal-body {
   padding: 20px;
   display: flex;
@@ -550,7 +600,7 @@ textarea.deck-create-input { cursor: text; }
     padding: 28px clamp(16px, 2vw, 40px);
   }
   .deck-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; align-items: start; }
-  .deck-create-toggle { display: block; }
+  .deck-create-toggle { display: flex; }
   .deck-create-form, .deck-create-toggle { max-width: 640px; margin-left: auto; margin-right: auto; }
   main.stage-shell:has(#view-summary:not([hidden])) { max-width: min(1500px, 100%); }
   .summary-list {

@@ -20,12 +20,12 @@
 <!-- Header -->
 <header class="app-header">
   <button type="button" class="logo-zone" id="logo-zone" title="Retour aux decks" aria-label="Retour aux decks">
-    <span class="logo-title">⚡ Quick-Pick</span>
-    <span class="deck-pill" id="header-deck-pill" hidden></span>
+    <span class="logo-title"><svg class="icon logo-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></svg>Quick-Pick</span>
+    <span class="deck-pill" id="header-deck-pill" hidden><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span id="header-deck-pill-text"></span></span>
   </button>
   <div class="header-actions-zone">
-    <button class="header-settings-btn" id="header-settings-btn" title="Paramètres du classifieur" aria-label="Paramètres">⚙️</button>
-    <button class="header-undo-btn" id="header-undo-btn" hidden title="Annuler la dernière décision (Ctrl+Z)" aria-label="Annuler la dernière décision">↩ Annuler</button>
+    <button class="header-settings-btn" id="header-settings-btn" title="Paramètres du classifieur" aria-label="Paramètres"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg></button>
+    <button class="header-undo-btn" id="header-undo-btn" hidden title="Annuler la dernière décision (Ctrl+Z)" aria-label="Annuler la dernière décision"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>Annuler</button>
     <button class="progress-pill-btn" id="header-progress-pill" hidden title="Voir les décisions et la file">
       <!-- Rempli dynamiquement : X tranchés · Y restants -->
     </button>
@@ -46,8 +46,8 @@
       <h2>Sujets à Décider</h2>
       <p>Sélectionne une pile pour lancer le flux de décisions.</p>
     </div>
-    <div class="deck-list" id="deck-list-container"></div>
-    <button type="button" class="deck-create-toggle" id="deck-create-toggle" aria-expanded="false" aria-controls="deck-create-form">Créer un deck</button>
+    <div class="deck-groups" id="deck-list-container"></div>
+    <button type="button" class="deck-create-toggle" id="deck-create-toggle" aria-expanded="false" aria-controls="deck-create-form"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Créer un deck</button>
     <form class="deck-create-form" id="deck-create-form" hidden>
       <h3 class="deck-create-head">Nouveau deck</h3>
       <div class="deck-create-field">
@@ -100,7 +100,7 @@
         <button class="drawer-tab-btn active" id="tab-btn-pending">À décider</button>
         <button class="drawer-tab-btn" id="tab-btn-decided">Décidés</button>
       </div>
-      <button class="drawer-close-btn" id="drawer-close-btn" aria-label="Fermer">✕</button>
+      <button class="drawer-close-btn" id="drawer-close-btn" aria-label="Fermer"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
     <div class="drawer-body" id="drawer-items-list"></div>
   </div>
@@ -111,7 +111,7 @@
   <div class="settings-modal-card">
     <div class="settings-modal-header">
       <h3 class="settings-modal-title">Paramètres du Classifieur</h3>
-      <button class="settings-close-btn" id="settings-close-btn" aria-label="Fermer la modale">✕</button>
+      <button class="settings-close-btn" id="settings-close-btn" aria-label="Fermer la modale"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
     <div class="settings-modal-body">
       <p class="settings-hint">Connecte un modèle IA via clé API BYOK (OpenAI, Ollama local, Groq, OpenRouter) ou un endpoint custom de décision.</p>
