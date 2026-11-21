@@ -532,6 +532,14 @@ textarea.deck-create-input { cursor: text; }
 @media (max-width: 640px) {
   .logo-zone:has(.deck-pill:not([hidden])) .logo-title { display: none; }
   .deck-pill { font-size: 13px; }
+  /* Inside a deck the header takes two rows: the deck name gets the full width on its
+     own row (wraps rather than being cut with "..."), the action buttons sit below. */
+  header.app-header:has(.deck-pill:not([hidden])) { flex-wrap: wrap; padding: 10px 14px; row-gap: 8px; }
+  header.app-header:has(.deck-pill:not([hidden])) .logo-zone { flex: 1 1 100%; }
+  header.app-header:has(.deck-pill:not([hidden])) .deck-pill {
+    white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere;
+  }
+  header.app-header:has(.deck-pill:not([hidden])) .header-actions-zone { flex: 1 1 100%; justify-content: flex-end; }
 }
 
 /* PC / large screens: deck list and summary use the width too (phone and tablet unchanged). */
