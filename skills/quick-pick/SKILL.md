@@ -1,7 +1,7 @@
 ---
 name: quick-pick
 description: "Use when you need a human to arbitrate 4+ independent items (backlog, rules, skills, PRs, options) as a swipe-card deck instead of a long chat questionnaire; not for a single blocking question."
-version: 2.2.0
+version: 2.2.1
 license: MIT
 platforms: [linux, macos, windows]
 category: orchestration

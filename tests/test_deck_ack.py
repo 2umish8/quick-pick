@@ -148,6 +148,72 @@ class AckStalenessTests(AckBase):
         deck["items"][2]["decided_seq"] += 1  # même seconde, séquence différente
         self.assertNotEqual(before, deck_store.deck_fingerprint(deck))
 
+    FROZEN = "2026-11-21T14:00:00+00:00"
+
+    def frozen_deck(self):
+        """Deck acquitté dont la dernière décision date de la seconde « figée » (temps gelé côté serveur)."""
+        deck = make_deck("d", 3)
+        deck["items"][2]["decided_at"] = self.FROZEN
+        self.write("d", deck)
+        self.assertEqual(self.ack()[0], 200)
+        self.assertEqual(self.state(), "valid")
+
+    def test_undo_then_same_decision_in_same_second_is_stale(self):
+        # Régression : la carte de plus haut decided_seq reprenait le même numéro après l'annulation ; avec
+        # decided_at à la seconde l'empreinte était identique et la prise en compte redevenait valide.
+        self.frozen_deck()
+        with patch.object(server, "utc_now_iso", return_value=self.FROZEN):
+            self.assertEqual(self.post("/api/decks/d/undo", {"item_id": "c3"})[0], 200)
+            self.assertEqual(self.state(), "stale")
+            self.assertEqual(self.post("/api/decks/d/decide", {"item_id": "c3", "action": "approve"})[0], 200)
+            self.assertEqual(self.state(), "stale")
+
+    def test_undo_without_item_id_then_same_decision_in_same_second_is_stale(self):
+        self.frozen_deck()
+        with patch.object(server, "utc_now_iso", return_value=self.FROZEN):
+            self.assertEqual(self.post("/api/decks/d/undo")[0], 200)
+            self.assertEqual(self.post("/api/decks/d/decide", {"item_id": "c3", "action": "approve"})[0], 200)
+        self.assertTrue(deck_store.deck_progress(deck_store.load_deck("d"))["is_completed"])
+        self.assertEqual(self.state(), "stale")
+
+    def test_deck_revision_counter_is_monotonic_and_ack_does_not_bump_it(self):
+        deck = make_deck("d", 2, 1)
+        self.write("d", deck)
+        revs = [deck_store.deck_revision(deck_store.load_deck("d"))]
+        self.assertEqual(revs[0], 0)  # deck existant sans compteur : 0
+        for step in (lambda: self.post("/api/decks/d/decide", {"item_id": "c3", "action": "approve"}),
+                     lambda: self.post("/api/decks/d/undo", {"item_id": "c3"}),
+                     lambda: self.post("/api/decks/d/items", {"items": ["x"]}),
+                     lambda: self.post("/api/decks/d/reset")):
+            self.assertEqual(step()[0], 200)
+            revs.append(deck_store.deck_revision(deck_store.load_deck("d")))
+        self.assertEqual(revs, [0, 1, 2, 3, 4])
+        self.post("/api/decks/d/decide", {"item_id": "c1", "action": "approve"})
+        self.post("/api/decks/d/decide", {"item_id": "c2", "action": "approve"})
+        self.post("/api/decks/d/decide", {"item_id": "c3", "action": "approve"})
+        self.post("/api/decks/d/decide", {"item_id": "item-4", "action": "approve"})
+        before = deck_store.deck_revision(deck_store.load_deck("d"))
+        self.assertEqual(self.ack()[0], 200)
+        self.assertEqual(deck_store.deck_revision(deck_store.load_deck("d")), before)
+        self.assertEqual(self.state(), "valid")
+
+    def test_legacy_deck_without_counter_keeps_its_old_fingerprint_valid(self):
+        deck = make_deck("l", 2)
+        self.assertNotIn("rev", deck)
+        deck["ack"] = {"agent": "a", "note": "", "at": "2026-11-21T10:00:00+00:00",
+                       "fingerprint": deck_store.deck_fingerprint(deck)}
+        self.write("l", deck)
+        self.assertEqual(self.listed("l")["ack_state"], "valid")
+
+    def test_restore_takes_the_counter_of_the_snapshot(self):
+        version = deck_store.snapshot_deck("d", "manual")  # état acquitté, compteur 0
+        self.post("/api/decks/d/undo", {"item_id": "c3"})
+        self.post("/api/decks/d/decide", {"item_id": "c3", "action": "approve"})
+        self.assertEqual(self.state(), "stale")
+        deck_store.restore_deck("d", version)
+        self.assertEqual(deck_store.deck_revision(deck_store.load_deck("d")), 0)
+        self.assertEqual(self.state(), "valid")
+
     def test_added_cards_make_stale(self):
         self.assertEqual(self.post("/api/decks/d/items", {"items": ["nouvelle carte"]})[0], 200)
         self.assertEqual(self.state(), "stale")

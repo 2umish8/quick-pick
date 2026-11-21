@@ -13,6 +13,7 @@
 - Interface : au retour sur l'onglet, la carte courante ou la liste se met à jour en silence (sans bandeau ni demande de jeton) ; rien n'est remplacé si une note, une zone « Ajouter des cartes » ou un bouton de confirmation est en cours. La synthèse n'est pas rafraîchie.
 
 ### Corrections
+- Prise en compte : annuler puis redécider la même action dans la même seconde la gardait valide (le numéro de décision était réutilisé). Un compteur de révision du deck (`rev`, jamais décrémenté) entre maintenant dans l'empreinte ; les decks sans ce champ gardent leur empreinte.
 - Le CLI ne re-sème plus les decks d'exemple après une suppression.
 - Un deck supprimé pendant une lecture répond 404 au lieu de 500 ; un fichier au JSON cassé lève une erreur de deck.
 

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 import deck_store
-from deck_store import (DeckError, DeckExistsError, StorageError, acknowledge_deck, add_items, create_deck, deck_lock, delete_deck,
+from deck_store import (DeckError, DeckExistsError, StorageError, acknowledge_deck, add_items, bump_revision, create_deck, deck_lock, delete_deck,
                         find_deck_state, list_available_decks, load_deck, reset_deck, resolve_item_actions,
                         save_deck, validate_new_deck)
 from deck_summary import compute_deck_summary
@@ -503,6 +503,7 @@ class QuickPickHandler(BaseHTTPRequestHandler):
                     next_seq = max((it.get("decided_seq") or 0 for it in items), default=0) + 1
                     target.update({"status": "decided", "chosen_action": act_id, "decided_at": utc_now_iso(),
                                    "decided_seq": next_seq, "comment": clean_c})
+                    bump_revision(deck)
                 elif action == "undo":
                     target_id = payload.get("item_id")
                     decided = [it for it in items if it.get("status") == "decided"]
@@ -519,6 +520,7 @@ class QuickPickHandler(BaseHTTPRequestHandler):
                         )[1]
                     target.update({"status": "pending", "chosen_action": None, "decided_at": None, "comment": None})
                     target.pop("decided_seq", None)
+                    bump_revision(deck)
                 elif action == "skip":
                     idx = next((i for i, it in enumerate(items) if it.get("id") == payload.get("item_id")), None)
                     if idx is None: return self.send_json(404, {"error": "item_not_found"})

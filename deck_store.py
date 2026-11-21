@@ -506,12 +506,18 @@ def reset_deck(deck_id):
     with deck_lock():
         deck = load_deck(deck_id)
         snapshot_deck(deck_id, "reset")
+        changed = False
         for item in deck.get("items", []):
+            if (item.get("status") != "pending" or item.get("chosen_action") is not None or item.get("decided_at")
+                    or item.get("comment") is not None or "decided_seq" in item):
+                changed = True
             item["status"] = "pending"
             item["chosen_action"] = None
             item["decided_at"] = None
             item["comment"] = None
             item.pop("decided_seq", None)
+        if changed:  # un reset sans effet ne change rien (et garde l'instantané identique non dupliqué)
+            bump_revision(deck)
         save_deck(deck_id, deck)
     return deck
 
@@ -545,6 +551,7 @@ def add_items(deck_id, raw_items):
             card_id = f"item-{counter}"
             used.add(card_id)
             items.append(dict(card, id=card_id))
+        bump_revision(deck)
         save_deck(deck_id, deck)
     return deck
 
@@ -575,16 +582,33 @@ def deck_progress(deck):
     return {"total": len(items), "decided": len(decided), "is_completed": is_completed, "completed_at": completed_at}
 
 
+def deck_revision(deck):
+    """Compteur de révision du deck (0 pour un deck sans ce champ) : monotone, jamais décrémenté par une opération."""
+    rev = deck.get("rev") if isinstance(deck, dict) else None
+    return rev if isinstance(rev, int) and not isinstance(rev, bool) and rev > 0 else 0
+
+
+def bump_revision(deck):
+    """À appeler à chaque decide, undo, ajout de cartes et reset (sous deck_lock, avant save_deck)."""
+    deck["rev"] = deck_revision(deck) + 1
+    return deck["rev"]
+
+
 def deck_fingerprint(deck):
     """Empreinte des décisions d'un deck : par carte (triée par id) id, status, chosen_action, comment,
     decided_at, decided_seq. decided_seq départage deux décisions dans la même seconde (decided_at est
-    à la seconde) : annuler puis redécider la même action change donc l'empreinte."""
+    à la seconde) ; le compteur de révision du deck (`rev`, jamais décrémenté, incrémenté à chaque decide, undo,
+    ajout de cartes et reset) est inclus dès qu'il est > 0 : annuler puis redécider la même action dans la même
+    seconde change donc l'empreinte. Un deck sans `rev` garde l'empreinte d'origine (rétrocompatibilité).
+    Une restauration d'instantané reprend le `rev` de l'instantané."""
     rows = []
     for item in deck.get("items") or []:
         rows.append([str(item.get("id")), item.get("status"), item.get("chosen_action"), item.get("comment"),
                      item.get("decided_at"), item.get("decided_seq")])
     rows.sort(key=lambda row: row[0])
-    payload = json.dumps(rows, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    rev = deck_revision(deck)
+    document = {"rev": rev, "rows": rows} if rev else rows
+    payload = json.dumps(document, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
 
