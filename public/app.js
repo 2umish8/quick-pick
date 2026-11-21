@@ -1,5 +1,5 @@
 // Module Principal Quick-Pick (SOLID SRP)
-import { fetchDecks, fetchDeckState, postDecision, postUndo, postSkip, fetchSummary, postReset, postDelete, postItems } from "./api.js";
+import { fetchHealth, fetchDecks, fetchDeckState, postDecision, postUndo, postSkip, fetchSummary, postReset, postDelete, postItems } from "./api.js";
 import { escapeHtml } from "./escape.js";
 import { renderStack, attachClassifierSuggestion } from "./stack.js";
 import { initDrawer, openDrawer, updateDrawerState } from "./deck-drawer.js";
@@ -556,7 +556,31 @@ function listRefreshAllowed() {
   return state.currentView === "decks" && !armed && !dom.deckList.querySelector(".deck-item-add:not([hidden])");
 }
 
+// Nouvelle version servie pendant que l'onglet dormait : recharger plutôt que garder l'ancien code.
+// Jamais pendant une note en cours de saisie ni un panneau ouvert ; un échec réseau ne change rien.
+const LOADED_VERSION = document.querySelector('meta[name="quick-pick-version"]')?.content || "";
+function reloadAllowed() {
+  const active = document.activeElement;
+  const editing = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+  if (editing || state.isProcessing || !panelsClosed() || dom.commentInput?.value.trim()) return false;
+  return state.currentView !== "decks" || listRefreshAllowed();
+}
+
+async function reloadIfNewVersion() {
+  if (!LOADED_VERSION) return false;
+  let health;
+  try {
+    health = await fetchHealth({ silent: true });
+  } catch {
+    return false;
+  }
+  if (!health?.version || health.version === LOADED_VERSION || !reloadAllowed()) return false;
+  window.location.reload();
+  return true;
+}
+
 async function refreshOnReturn() {
+  if (await reloadIfNewVersion()) return;
   const view = state.currentView;
   if (view === "game") {
     if (!gameRefreshAllowed()) return;

@@ -158,6 +158,10 @@ export async function authFetch(url, options = {}) {
   return response;
 }
 
+export function fetchHealth(options) {
+  return request("/api/health", options);
+}
+
 export function fetchDecks(options) {
   return request("/api/decks", options);
 }

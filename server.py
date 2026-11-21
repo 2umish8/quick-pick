@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """quick-pick — Serveur HTTP & API de décision (SOLID / SRP)."""
+import hashlib
 import hmac
 import ipaddress
+import threading
 import json, os, re, sys
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,6 +19,50 @@ DEFAULT_PORT = int(os.environ.get("QUICK_PICK_PORT", "8791"))
 QUICK_PICK_TOKEN = os.environ.get("QUICK_PICK_TOKEN", "")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 MAX_BODY_SIZE = 2 * 1024 * 1024  # 2 Mo
+
+
+# Asset versioning: Cloudflare's zone Browser Cache TTL (4 h) lets phones keep an old CSS/JS copy
+# even though we send no-cache. Every local asset URL carries ?v=<hash of public/>, so a new
+# version is a new URL that no cache has seen. The query string is ignored when serving.
+_ASSET_VERSION_LOCK = threading.Lock()
+_asset_version_cache = {"signature": None, "version": ""}
+_ASSET_REF_HTML = re.compile(r'((?:href|src)="\./[^"?#]+\.(?:css|js|svg))"')
+_ASSET_REF_JS = re.compile(r'(\bfrom\s*["\']\./[^"\'?#]+\.js)(["\'])')
+
+
+def asset_version(public_dir=None):
+    """Short hash of every file in public/, recomputed only when a file changes (mtime/size)."""
+    root = public_dir or PUBLIC_DIR
+    entries = []
+    for name in sorted(os.listdir(root)):
+        path = os.path.join(root, name)
+        if os.path.isfile(path):
+            st = os.stat(path)
+            entries.append((name, st.st_mtime_ns, st.st_size))
+    signature = (root, tuple(entries))
+    with _ASSET_VERSION_LOCK:
+        if _asset_version_cache["signature"] == signature:
+            return _asset_version_cache["version"]
+        digest = hashlib.sha256()
+        for name, _, _ in entries:
+            digest.update(name.encode("utf-8") + b"\0")
+            with open(os.path.join(root, name), "rb") as h:
+                digest.update(h.read())
+        version = digest.hexdigest()[:12]
+        _asset_version_cache.update(signature=signature, version=version)
+        return version
+
+
+def version_asset_refs(body, ext, version):
+    """Append ?v=<version> to local asset references in index.html and to ES module imports."""
+    if ext == ".html":
+        text = _ASSET_REF_HTML.sub(lambda m: f'{m.group(1)}?v={version}"', body.decode("utf-8"))
+        text = text.replace("</head>", f'<meta name="quick-pick-version" content="{version}">\n</head>', 1)
+        return text.encode("utf-8")
+    if ext == ".js":
+        text = _ASSET_REF_JS.sub(lambda m: f"{m.group(1)}?v={version}{m.group(2)}", body.decode("utf-8"))
+        return text.encode("utf-8")
+    return body
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 _WILDCARD_HOSTS = {"", "0.0.0.0", "::"}
@@ -245,6 +291,9 @@ class QuickPickHandler(BaseHTTPRequestHandler):
         ctype = ctypes.get(os.path.splitext(safe)[1].lower(), "text/plain; charset=utf-8")
         with open(disk_path, "rb") as h:
             body = h.read()
+        ext = os.path.splitext(safe)[1].lower()
+        if ext in (".html", ".js"):
+            body = version_asset_refs(body, ext, asset_version())
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -343,7 +392,7 @@ class QuickPickHandler(BaseHTTPRequestHandler):
         if not self._check_api_auth(path, head_only=head_only): return
         if not self._check_origin(path, head_only=head_only): return
         if path in ("/", "/index.html"): return self.serve_static("index.html", head_only=head_only)
-        if path == "/api/health": return self.send_json(200, {"ok": True, "time": utc_now_iso()}, head_only=head_only)
+        if path == "/api/health": return self.send_json(200, {"ok": True, "time": utc_now_iso(), "version": asset_version()}, head_only=head_only)
         if path == "/api/decks": return self.send_json(200, {"decks": list_available_decks()}, head_only=head_only)
         if path.startswith("/api/decks/"):
             p = [x for x in path.split("/") if x]
