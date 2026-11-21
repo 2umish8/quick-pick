@@ -143,8 +143,7 @@ test("decision actions are announced as a labelled group with keyboard shortcuts
   const appJs = read("app.js");
   assert.match(appJs, /aria-keyshortcuts=/);
   assert.match(appJs, /DIRECTION_SHORTCUTS/);
-  // The dock is rebuilt after every decision: focus must follow (by action id, the visual order differs from the action order).
-  assert.match(appJs, /btn\.dataset\.actionId === focusedId/);
+  // Focus restoration after a dock re-render is tested by behaviour in dock_focus.test.mjs.
 });
 
 test("the dock mirrors the swipe geography and the swipe shows the targeted action", () => {
