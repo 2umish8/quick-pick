@@ -1,6 +1,7 @@
 import contextlib
 import datetime
 import errno
+import hashlib
 import json
 import os
 import re
@@ -105,6 +106,8 @@ HISTORY_DIRNAME = ".history"
 LOCK_TIMEOUT_S = 5
 LOCK_POLL_S = 0.05
 HISTORY_KEEP = 10
+ACK_AGENT_MAX = 40
+ACK_NOTE_MAX = 280
 VERSION_REGEX = re.compile(r"^[0-9]{8}T[0-9]{12}Z-[a-z]+$")
 
 _PROCESS_LOCK = threading.RLock()
@@ -572,6 +575,84 @@ def deck_progress(deck):
     return {"total": len(items), "decided": len(decided), "is_completed": is_completed, "completed_at": completed_at}
 
 
+def deck_fingerprint(deck):
+    """Empreinte des décisions d'un deck : par carte (triée par id) id, status, chosen_action, comment,
+    decided_at, decided_seq. decided_seq départage deux décisions dans la même seconde (decided_at est
+    à la seconde) : annuler puis redécider la même action change donc l'empreinte."""
+    rows = []
+    for item in deck.get("items") or []:
+        rows.append([str(item.get("id")), item.get("status"), item.get("chosen_action"), item.get("comment"),
+                     item.get("decided_at"), item.get("decided_seq")])
+    rows.sort(key=lambda row: row[0])
+    payload = json.dumps(rows, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
+
+
+def deck_ack_state(deck):
+    """Prise en compte par l'agent, calculée à la lecture (jamais stockée) : l'unique endroit qui décide.
+
+    state : "none" (jamais signalée), "valid" (deck terminé, non vide, empreinte actuelle == empreinte
+    enregistrée) ou "stale" (signalée, mais le deck a changé depuis : annulation, redécision, cartes
+    ajoutées, remise à zéro, restauration...). ack : {agent, note, at} pour valid et stale, sinon None.
+    """
+    ack = deck.get("ack")
+    if not isinstance(ack, dict) or not isinstance(ack.get("fingerprint"), str):
+        return {"state": "none", "ack": None}
+    progress = deck_progress(deck)
+    valid = progress["total"] > 0 and progress["is_completed"] and ack["fingerprint"] == deck_fingerprint(deck)
+    public = {"agent": ack.get("agent"), "note": ack.get("note") or "", "at": ack.get("at")}
+    return {"state": "valid" if valid else "stale", "ack": public}
+
+
+def acknowledge_deck(deck_id, agent, note=None):
+    """L'agent signale qu'il a pris en compte le résultat d'un deck terminé. Sous le verrou du deck.
+
+    DeckError(code=...) : invalid_agent / note_too_long (400), deck_empty / deck_not_completed (409).
+    """
+    clean_agent = agent.strip() if isinstance(agent, str) else ""
+    if not clean_agent or len(clean_agent) > ACK_AGENT_MAX:
+        raise DeckError(f"Nom d'agent requis ({ACK_AGENT_MAX} caractères au plus)", code="invalid_agent")
+    if note is not None and not isinstance(note, str):
+        raise DeckError("La note doit être un texte", code="invalid_note")
+    clean_note = (note or "").strip()
+    if len(clean_note) > ACK_NOTE_MAX:
+        raise DeckError(f"Note trop longue ({ACK_NOTE_MAX} caractères au plus)", code="note_too_long")
+    with deck_lock():
+        deck = load_deck(deck_id)
+        progress = deck_progress(deck)
+        if progress["total"] == 0:
+            raise DeckError("Deck vide : rien à prendre en compte", code="deck_empty")
+        if not progress["is_completed"]:
+            raise DeckError("Deck non terminé : rien à prendre en compte", code="deck_not_completed")
+        deck["ack"] = {
+            "agent": clean_agent,
+            "note": clean_note,
+            "at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+            "fingerprint": deck_fingerprint(deck),
+        }
+        save_deck(deck_id, deck)
+    return deck
+
+
+def last_activity(deck, filepath=None):
+    """Dernière activité (ISO UTC) : plus grand decided_at analysable, sinon date de modification du fichier."""
+    stamps = [s for s in (parse_decision_timestamp(it.get("decided_at")) for it in deck.get("items") or []
+                          if isinstance(it, dict)) if s is not None]
+    if stamps:
+        return max(stamps).astimezone(datetime.timezone.utc).isoformat(timespec="seconds")
+    return _file_mtime_iso(filepath)
+
+
+def _file_mtime_iso(filepath):
+    if not filepath:
+        return None
+    try:
+        mtime = os.path.getmtime(filepath)
+    except OSError:
+        return None
+    return datetime.datetime.fromtimestamp(mtime, datetime.timezone.utc).isoformat(timespec="seconds")
+
+
 def list_available_decks():
     if not os.path.isdir(DECKS_DIR):
         return []
@@ -580,15 +661,19 @@ def list_available_decks():
         if not filename.endswith(".json"):
             continue
         filepath = os.path.join(DECKS_DIR, filename)
+        file_id = filename[:-len(".json")]
+        activity = _file_mtime_iso(filepath)
         try:
             with open(filepath, "r", encoding="utf-8") as handle:
                 deck = json.load(handle)
         except (ValueError, OSError) as err:
+            # Unreadable file: still listed (flagged), never hidden; never raises.
             print(f"[quick-pick] deck_read_error file={filename} err={err}", file=sys.stderr)
+            decks.append(_invalid_entry(file_id, file_id, "", "JSON illisible", activity))
             continue
         if not (isinstance(deck, dict) and deck.get("id") and deck.get("title")):
+            decks.append(_invalid_entry(file_id, file_id, "", "Deck sans id ni titre", activity))
             continue
-        file_id = filename[:-len(".json")]
         entry = {
             "id": deck["id"],
             "title": deck["title"],
@@ -601,12 +686,21 @@ def list_available_decks():
                 raise DeckError(f"Identifiant incohérent avec le nom de fichier : {file_id}")
             validate_items(deck.get("items", []), file_id)
             progress = deck_progress(deck)
-            entry.update(total=progress["total"], decided=progress["decided"], is_completed=progress["is_completed"])
-        except DeckError:
+            ack = deck_ack_state(deck)
+            entry.update(total=progress["total"], decided=progress["decided"], is_completed=progress["is_completed"],
+                         last_activity=last_activity(deck, filepath), ack_state=ack["state"], ack=ack["ack"])
+        except DeckError as err:
             # Never expose the inner id of a broken deck: actions (delete) must hit this very file.
-            entry.update(id=file_id, invalid=True, total=None, decided=None, is_completed=False)
+            entry = _invalid_entry(file_id, str(deck["title"]), str(deck.get("description") or ""), str(err), activity,
+                                   category=deck.get("category", "GÉNÉRAL"))
         decks.append(entry)
     return decks
+
+
+def _invalid_entry(deck_id, title, description, error, activity, category="GÉNÉRAL"):
+    return {"id": deck_id, "title": title, "description": description, "category": category, "invalid": True,
+            "error": error, "total": None, "decided": None, "is_completed": False, "last_activity": activity,
+            "ack_state": "none", "ack": None}
 
 
 def resolve_item_actions(default_actions, item):
@@ -645,6 +739,7 @@ def find_deck_state(deck):
     current_item = prepare_item_payload(deck, pending[0]) if pending else None
     upcoming_items = [prepare_item_payload(deck, it) for it in pending[1:4]]
     pending_list = [{"id": it["id"], "title": it["title"], "badges": it.get("badges", [])} for it in pending]
+    ack = deck_ack_state(deck)
 
     decided_list = []
     for it in decided:
@@ -669,6 +764,8 @@ def find_deck_state(deck):
         "guidelines": deck.get("guidelines", ""),
         "is_completed": progress["is_completed"],
         "completed_at": progress["completed_at"],
+        "ack_state": ack["state"],
+        "ack": ack["ack"],
         "current_item": current_item,
         "upcoming_items": upcoming_items,
         "pending_items": pending_list,

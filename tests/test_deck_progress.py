@@ -244,11 +244,11 @@ class ListAvailableDecksTests(TempDecksCase):
         with open(os.path.join(self.decks_dir, "json-casse.json"), "w", encoding="utf-8") as handle:
             handle.write("{nope")
         listed = {d["id"]: d for d in deck_store.list_available_decks()}
-        self.assertEqual(set(listed), {"half", "done", "bad", "file-name"})  # JSON cassé : non listé
+        self.assertEqual(set(listed), {"half", "done", "bad", "file-name", "json-casse"})  # JSON cassé : listé, signalé
         self.assertEqual((listed["half"]["total"], listed["half"]["decided"], listed["half"]["is_completed"]), (2, 1, False))
         self.assertTrue(listed["done"]["is_completed"])
         self.assertFalse(listed["half"]["invalid"])
-        for key in ("bad", "file-name"):
+        for key in ("bad", "file-name", "json-casse"):
             self.assertTrue(listed[key]["invalid"])
             self.assertIsNone(listed[key]["total"])
             self.assertIsNone(listed[key]["decided"])

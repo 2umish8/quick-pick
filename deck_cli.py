@@ -11,6 +11,8 @@ from deck_store import (
     DeckError,
     DeckExistsError,
     StorageError,
+    acknowledge_deck,
+    deck_ack_state,
     deck_exists,
     deck_lock,
     delete_deck,
@@ -165,6 +167,16 @@ def handle_reset(args):
     print(f"Deck réinitialisé avec succès : {args.id} ({len(deck.get('items', []))} items remis en attente)")
 
 
+def handle_ack(args):
+    """Signale que l'agent a pris en compte le résultat d'un deck terminé (exit 1 si non terminé ou vide)."""
+    deck_id = args.id or args.deck_id
+    if not deck_id:
+        raise DeckError("Identifiant du deck requis (--id)")
+    deck = acknowledge_deck(deck_id, args.agent, args.note)
+    ack = deck_ack_state(deck)
+    print(json.dumps({"deck_id": deck_id, "ack_state": ack["state"], "ack": ack["ack"]}, ensure_ascii=False))
+
+
 def handle_delete(args):
     delete_deck(args.id)
     print(f"Deck supprimé avec succès : {args.id}")
@@ -266,6 +278,13 @@ def build_parser():
     reset_p = subparsers.add_parser("reset", help="Réinitialiser toutes les décisions d'un deck")
     reset_p.add_argument("id", help="Identifiant du deck")
     reset_p.set_defaults(func=handle_reset)
+
+    ack_p = subparsers.add_parser("ack", help="Signaler que l'agent a pris en compte le résultat d'un deck terminé")
+    ack_p.add_argument("deck_id", nargs="?", default=None, help="Identifiant du deck (ou --id)")
+    ack_p.add_argument("--id", default=None, help="Identifiant du deck")
+    ack_p.add_argument("--agent", required=True, help="Nom de l'agent (40 caractères au plus)")
+    ack_p.add_argument("--note", default=None, help="Note courte facultative (280 caractères au plus)")
+    ack_p.set_defaults(func=handle_ack)
 
     delete_p = subparsers.add_parser("delete", help="Supprimer un deck existant")
     delete_p.add_argument("id", help="Identifiant du deck")

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 import deck_store
-from deck_store import (DeckError, DeckExistsError, StorageError, add_items, create_deck, deck_lock, delete_deck,
+from deck_store import (DeckError, DeckExistsError, StorageError, acknowledge_deck, add_items, create_deck, deck_lock, delete_deck,
                         find_deck_state, list_available_decks, load_deck, reset_deck, resolve_item_actions,
                         save_deck, validate_new_deck)
 from deck_summary import compute_deck_summary
@@ -350,6 +350,20 @@ class QuickPickHandler(BaseHTTPRequestHandler):
         except StorageError as err:
             return self._storage_error(err)
 
+    def _ack_deck(self, deck_id, payload):
+        """ack : the agent reports it took the result into account. 400 bad input, 404 unknown, 409 not finished."""
+        try:
+            with deck_lock():
+                try: load_deck(deck_id)
+                except DeckError as err: return self.send_json(404, {"error": str(err)})
+                try: deck = acknowledge_deck(deck_id, payload.get("agent"), payload.get("note"))
+                except DeckError as err:
+                    status = 409 if err.code in ("deck_empty", "deck_not_completed") else 400
+                    return self.send_json(status, self._deck_error_body(err))
+                return self.send_json(200, {"ok": True, **find_deck_state(deck)})
+        except StorageError as err:
+            return self._storage_error(err)
+
     def _storage_error(self, err):
         return self.send_json(err.http_status, {"error": err.code, "detail": err.detail})
 
@@ -462,6 +476,8 @@ class QuickPickHandler(BaseHTTPRequestHandler):
 
         if len(p) == 4 and p[0] == "api" and p[1] == "decks" and p[3] in ("reset", "delete", "items"):
             return self._manage_deck(p[2], p[3], payload)
+        if len(p) == 4 and p[0] == "api" and p[1] == "decks" and p[3] == "ack":
+            return self._ack_deck(p[2], payload)
 
         if len(p) < 4 or p[0] != "api" or p[1] != "decks": return self.send_json(404, {"error": "not_found"})
         deck_id, action = p[2], p[3]
