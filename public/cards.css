@@ -226,3 +226,56 @@ main.stage-shell:has(#view-game:not([hidden])) {
   /* Keyboard hints are meaningless on a touch screen. */
   .keycap-badge { display: none; }
 }
+
+/* PC / large screens: the game view uses the width instead of a 420 px phone column.
+   Card on the left (wide, larger text), note + action dock in a side column,
+   geography kept (north above, west left, east right, south below). Phone and tablet
+   (< 1000 px) are untouched. */
+@media (min-width: 1000px) {
+  main.stage-shell:has(#view-game:not([hidden])) {
+    max-width: min(1720px, 100%);
+    padding-left: clamp(16px, 2vw, 40px);
+    padding-right: clamp(16px, 2vw, 40px);
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+  #view-game {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(470px, 30vw, 560px);
+    grid-template-rows: 1fr auto auto 1fr;
+    column-gap: clamp(20px, 2.4vw, 56px);
+    row-gap: 12px;
+    align-items: stretch;
+    justify-items: stretch;
+  }
+  .card-stack-container {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    max-width: none;
+    margin: 0;
+  }
+  .comment-bar {
+    grid-column: 2; grid-row: 2;
+    max-width: none; margin-bottom: 0;
+  }
+  .comment-input { height: 52px; font-size: 15px; }
+  .comment-input::placeholder { font-size: 14px; }
+  .kinetic-dock {
+    grid-column: 2; grid-row: 3;
+    max-width: none; gap: 10px;
+  }
+  .action-key-button { flex-basis: calc(50% - 5px); min-height: 60px; font-size: 16px; white-space: nowrap; padding: 0 8px; gap: 6px; }
+  .dock-arrow { font-size: 22px; }
+  .keycap-badge { font-size: 12px; padding: 3px 8px; }
+  .card-inner { padding: clamp(24px, 2.4vw, 48px) clamp(24px, 2.6vw, 56px); }
+  .card-badges { gap: 8px; margin-bottom: clamp(12px, 1.2vw, 20px); }
+  .badge-tag { font-size: clamp(12px, 0.95vw, 16px); padding: 4px 10px; }
+  .card-title { font-size: clamp(24px, 2.1vw, 44px); margin-bottom: clamp(12px, 1.2vw, 22px); }
+  .card-description { font-size: clamp(17px, 1.3vw, 28px); margin-bottom: clamp(14px, 1.2vw, 24px); }
+  .bullet-item { font-size: clamp(17px, 1.3vw, 28px); padding-left: 24px; }
+  .bullet-item::before { top: 0.65em; }
+  .swipe-hint { font-size: clamp(17px, 1.4vw, 26px); }
+}
+@media (min-width: 1000px) {
+  .action-key-button.dir-north, .action-key-button.dir-south { flex-basis: 100%; }
+}

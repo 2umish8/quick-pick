@@ -533,3 +533,26 @@ textarea.deck-create-input { cursor: text; }
   .logo-zone:has(.deck-pill:not([hidden])) .logo-title { display: none; }
   .deck-pill { font-size: 13px; }
 }
+
+/* PC / large screens: deck list and summary use the width too (phone and tablet unchanged). */
+@media (min-width: 1000px) {
+  main.stage-shell:has(#view-decks:not([hidden])) {
+    max-width: min(1500px, 100%);
+    justify-content: flex-start;
+    padding: 28px clamp(16px, 2vw, 40px);
+  }
+  .deck-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; align-items: start; }
+  .deck-create-toggle { display: block; }
+  .deck-create-form, .deck-create-toggle { max-width: 640px; margin-left: auto; margin-right: auto; }
+  main.stage-shell:has(#view-summary:not([hidden])) { max-width: min(1500px, 100%); }
+  .summary-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
+    gap: 10px 16px;
+    max-height: 56dvh;
+    align-content: start;
+  }
+}
+@media (min-width: 1800px) {
+  .deck-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
