@@ -61,6 +61,7 @@ header.app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   border-bottom: 1px solid var(--border);
   background: rgba(12, 14, 18, 0.85);
   backdrop-filter: blur(12px);
@@ -73,12 +74,15 @@ header.app-header {
   align-items: center;
   gap: 2px 10px;
   flex-wrap: wrap;
+  /* Must be allowed to shrink, otherwise the header pushes the layout viewport wider than the phone. */
+  min-width: 0;
   cursor: pointer;
   /* MOW-188: real <button> now, without the native chrome. */
   background: none; border: 0; padding: 0;
   font: inherit; color: inherit; text-align: left;
 }
 .logo-title {
+  flex: 0 0 auto;
   white-space: nowrap;
   font-size: 17px;
   font-weight: 700;
@@ -88,7 +92,8 @@ header.app-header {
   font-size: 12px;
   font-weight: 600;
   color: var(--info);
-  max-width: calc(100vw - 40px);
+  max-width: 100%;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
