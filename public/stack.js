@@ -11,7 +11,9 @@ function getCardOrganicTransform(index, id) {
   for (let i = 0; i < (id || "").length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
   // Unsigned: a negative hash used to double the tilt and push the card off the left edge.
   const h = hash >>> 0;
-  const rot = (((h % 100) / 100) * 4.4 - 2.2).toFixed(2);
+  // On wide screens the card is large: a full tilt makes its text slant and blur.
+  const tilt = (typeof matchMedia === "function" && matchMedia("(min-width: 1000px)").matches) ? 0.15 : 1;
+  const rot = ((((h % 100) / 100) * 4.4 - 2.2) * tilt).toFixed(2);
   const dx = ((((h >>> 3) % 100) / 100) * 8 - 4).toFixed(1);
   const dy = (index * 8 + (((h >>> 5) % 100) / 100) * 4 - 2).toFixed(1);
   const scale = (1 - index * 0.025).toFixed(3);
