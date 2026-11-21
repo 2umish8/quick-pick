@@ -143,6 +143,41 @@ test("decision actions are announced as a labelled group with keyboard shortcuts
   const appJs = read("app.js");
   assert.match(appJs, /aria-keyshortcuts=/);
   assert.match(appJs, /DIRECTION_SHORTCUTS/);
-  // The dock is rebuilt after every decision: focus must follow.
-  assert.match(appJs, /buttons\[Math\.min\(focusedIndex, buttons\.length - 1\)\]\.focus\(\)/);
+  // The dock is rebuilt after every decision: focus must follow (by action id, the visual order differs from the action order).
+  assert.match(appJs, /btn\.dataset\.actionId === focusedId/);
+});
+
+test("clickable deck and logo zones are real buttons", () => {
+  const html = read("index.html");
+  assert.match(html, /<button type="button" class="logo-zone" id="logo-zone"[^>]*aria-label="Retour aux decks">/);
+  const appJs = read("app.js");
+  assert.match(appJs, /<button type="button" class="deck-item-card"/);
+  assert.ok(!/<div class="deck-item-card"/.test(appJs), "deck cards must not stay divs");
+});
+
+test("a global :focus-visible ring exists and no stylesheet resets outlines", () => {
+  assert.match(read("style.css"), /:focus-visible\s*\{[^}]*outline:/);
+  for (const file of ["style.css", "cards.css", "drawer.css"]) {
+    assert.ok(!/outline:\s*none/.test(read(file)), `${file} still disables outlines`);
+  }
+});
+
+test("decision actions are announced as a labelled group with keyboard shortcuts", () => {
+  assert.match(read("index.html"), /id="kinetic-dock" role="group" aria-label="Décider pour cette carte"/);
+  const appJs = read("app.js");
+  assert.match(appJs, /aria-keyshortcuts=/);
+  assert.match(appJs, /DIRECTION_SHORTCUTS/);
+  // The dock is rebuilt after every decision: focus must follow (by action id, the visual order differs from the action order).
+  assert.match(appJs, /btn\.dataset\.actionId === focusedId/);
+});
+
+test("the dock mirrors the swipe geography and the swipe shows the targeted action", () => {
+  const appJs = read("app.js");
+  assert.match(appJs, /DOCK_RANK = \{ north: 0, west: 1, east: 2, south: 3 \}/);
+  assert.match(appJs, /data-direction=/);
+  const stack = read("stack.js");
+  assert.match(stack, /swipe-hint/);
+  const css = read("cards.css");
+  assert.match(css, /\.swipe-hint\.tone-success/);
+  assert.match(css, /\.action-key-button\.tone-danger/);
 });

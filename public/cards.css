@@ -142,19 +142,30 @@ main.stage-shell:has(#view-game:not([hidden])) {
 .comment-input:focus { border-color: var(--border-focus); background: rgba(0, 0, 0, 0.5); }
 .comment-input::placeholder { color: #64748B; font-size: 12.5px; }
 
-/* Dock Clavier Desktop */
+/* Dock : reflète la géographie du geste (nord au-dessus, ouest à gauche, est à droite, sud en dessous) */
 .kinetic-dock {
-  width: 100%; max-width: min(420px, 100%); display: flex; gap: 10px;
+  width: 100%; max-width: min(420px, 100%); display: flex; flex-wrap: wrap; gap: 8px;
   flex-shrink: 0;
 }
 .action-key-button {
-  flex: 1; min-height: 48px; background: rgba(255, 255, 255, 0.04);
+  flex: 1 1 calc(50% - 4px); min-height: 48px; background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border); border-radius: var(--radius-btn);
-  color: var(--text); font-size: 13px; font-weight: 600;
+  color: var(--text); font-size: 14px; font-weight: 600;
   display: flex; align-items: center; justify-content: center; gap: 8px;
   cursor: pointer; transition: all 0.12s ease;
 }
+.action-key-button.dir-north, .action-key-button.dir-south { flex-basis: 100%; }
 .action-key-button:hover { background: rgba(255, 255, 255, 0.08); border-color: var(--border-focus); }
+.dock-arrow { font-size: 18px; line-height: 1; font-weight: 700; }
+/* One colour per action, the same as the swipe label; soft tints, never pure white on pure black. */
+.action-key-button.tone-success { background: rgba(34, 197, 94, 0.14); border-color: rgba(34, 197, 94, 0.5); color: #86EFAC; }
+.action-key-button.tone-danger { background: rgba(239, 68, 68, 0.14); border-color: rgba(239, 68, 68, 0.5); color: #FCA5A5; }
+.action-key-button.tone-warning { background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.5); color: #FCD34D; }
+.action-key-button.tone-info { background: rgba(56, 189, 248, 0.14); border-color: rgba(56, 189, 248, 0.5); color: #7DD3FC; }
+.action-key-button.tone-success:hover { background: rgba(34, 197, 94, 0.24); }
+.action-key-button.tone-danger:hover { background: rgba(239, 68, 68, 0.24); }
+.action-key-button.tone-warning:hover { background: rgba(245, 158, 11, 0.24); }
+.action-key-button.tone-info:hover { background: rgba(56, 189, 248, 0.24); }
 .keycap-badge {
   font-size: 10px; padding: 2px 6px; border-radius: 4px;
   border: 1px solid var(--border); background: rgba(0, 0, 0, 0.4); color: var(--muted);
@@ -177,8 +188,8 @@ main.stage-shell:has(#view-game:not([hidden])) {
     padding-bottom: max(6px, env(safe-area-inset-bottom));
   }
   .action-key-button {
-    flex: 1 1 calc(50% - 4px);
     min-height: 48px;
+    font-size: 15px;
   }
   /* Keyboard hints are meaningless on a touch screen. */
   .keycap-badge { display: none; }

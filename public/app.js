@@ -321,14 +321,19 @@ async function triggerUndo(itemId = null) {
 
 const DIRECTION_SHORTCUTS = { east: "ArrowRight", west: "ArrowLeft", north: "ArrowUp", south: "ArrowDown" };
 
+const DOCK_ARROWS = { east: "→", west: "←", north: "↑", south: "↓" };
+const DOCK_RANK = { north: 0, west: 1, east: 2, south: 3 };
+const dockRank = (action) => DOCK_RANK[action.direction] ?? 4;
+
 function renderDock(actions) {
   // Keep keyboard focus on an equivalent button after the dock is re-rendered.
   const focusedBtn = document.activeElement?.closest?.(".action-key-button");
-  const focusedIndex = focusedBtn
-    ? actions.findIndex(a => String(a.id) === focusedBtn.dataset.actionId)
-    : -1;
-  dom.kineticDock.innerHTML = actions.map(act => `
-    <button class="action-key-button ${escapeHtml(act.color || 'neutral')}" data-action-id="${escapeHtml(act.id)}"${ariaKeyShortcuts(act)}>
+  const focusedId = focusedBtn ? focusedBtn.dataset.actionId : null;
+  // The dock mirrors the geography of the swipe: north above, west on the left, east on the right, south below.
+  const ordered = [...actions].sort((a, b) => dockRank(a) - dockRank(b));
+  dom.kineticDock.innerHTML = ordered.map(act => `
+    <button class="action-key-button tone-${escapeHtml(act.color || 'neutral')} dir-${escapeHtml(act.direction || 'none')}" data-action-id="${escapeHtml(act.id)}" data-direction="${escapeHtml(act.direction || '')}"${ariaKeyShortcuts(act)}>
+      ${DOCK_ARROWS[act.direction] ? `<span class="dock-arrow" aria-hidden="true">${DOCK_ARROWS[act.direction]}</span>` : ""}
       <span>${escapeHtml(act.label)}</span>
       ${act.key ? `<kbd class="keycap-badge">${escapeHtml(String(act.key).toUpperCase())}</kbd>` : ""}
     </button>
@@ -337,8 +342,9 @@ function renderDock(actions) {
   buttons.forEach(btn => {
     btn.addEventListener("click", () => onCardDecide(btn.dataset.actionId));
   });
-  if (focusedIndex >= 0 && buttons.length) {
-    buttons[Math.min(focusedIndex, buttons.length - 1)].focus();
+  if (focusedId !== null && buttons.length) {
+    const same = [...buttons].find(btn => btn.dataset.actionId === focusedId);
+    (same || buttons[0]).focus();
   }
 }
 
