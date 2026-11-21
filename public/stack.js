@@ -9,9 +9,11 @@ const DIRECTION_ARROWS = { east: "→", west: "←", north: "↑", south: "↓" 
 function getCardOrganicTransform(index, id) {
   let hash = 0;
   for (let i = 0; i < (id || "").length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  const rot = (((hash % 100) / 100) * 4.4 - 2.2).toFixed(2);
-  const dx = ((((hash >> 3) % 100) / 100) * 8 - 4).toFixed(1);
-  const dy = (index * 8 + (((hash >> 5) % 100) / 100) * 4 - 2).toFixed(1);
+  // Unsigned: a negative hash used to double the tilt and push the card off the left edge.
+  const h = hash >>> 0;
+  const rot = (((h % 100) / 100) * 4.4 - 2.2).toFixed(2);
+  const dx = ((((h >>> 3) % 100) / 100) * 8 - 4).toFixed(1);
+  const dy = (index * 8 + (((h >>> 5) % 100) / 100) * 4 - 2).toFixed(1);
   const scale = (1 - index * 0.025).toFixed(3);
   return { rot, dx, dy, scale };
 }
